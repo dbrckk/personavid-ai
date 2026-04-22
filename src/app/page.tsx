@@ -1,98 +1,90 @@
 "use client";
 
 import React, { useState } from 'react';
-// Chemin relatif direct pour éviter les erreurs d'alias @/
 import { getPredictiveHeatmap } from '../lib/retention-agent';
 
 export default function NeuralRapturePage() {
   const [input, setInput] = useState('');
   const [isRendering, setIsRendering] = useState(false);
-  const [retentionScore, setRetentionScore] = useState(99.1);
-  
-  // Analyse en temps réel du texte pour l'UI
-  const heatmap = getPredictiveHeatmap(input || "Initialisation système...");
-
-  const handleManifest = async () => {
-    if (!input) return;
-    setIsRendering(true);
-    
-    try {
-      const response = await fetch('/api/render', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          script: input,
-          id: `proj_${Date.now()}`
-        }),
-      });
-      
-      if (response.ok) {
-        console.log("Manifestation envoyée au noyau.");
-      }
-    } catch (err) {
-      console.error("Rupture de transmission.");
-    } finally {
-      setIsRendering(false);
-    }
-  };
+  const score = 99.1;
+  const heatmap = getPredictiveHeatmap(input || "SYSTEM IDLE...");
 
   return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 font-mono selection:bg-cyan-500 overflow-hidden text-white">
+    <main className="relative min-h-screen flex items-center justify-center p-4 bg-[#030303]">
+      <div className="scanline" />
       
-      {/* Radar de Rétention */}
-      <div className="relative w-72 h-72 mb-16 group">
-        <div className="absolute inset-0 border border-cyan-500/20 rounded-full animate-ping duration-[3s]"></div>
-        <svg className="absolute inset-0 w-full h-full rotate-[-90deg]">
-          <circle cx="144" cy="144" r="120" fill="transparent" stroke="rgba(6, 182, 212, 0.1)" strokeWidth="2" />
-          <circle
-            cx="144" cy="144" r="120"
-            fill="transparent"
-            stroke="cyan"
-            strokeWidth="2"
-            strokeDasharray="753.6"
-            strokeDashoffset={753.6 - (753.6 * retentionScore) / 100}
-            className="transition-all duration-1000"
-          />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-[9px] text-cyan-500 tracking-[0.6em] mb-1 opacity-50 uppercase">Attention_Flux</span>
-          <span className="text-4xl font-black italic">{retentionScore}%</span>
-        </div>
-      </div>
+      {/* Background Ambience */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-cyan-500/5 rounded-full blur-[120px]" />
 
-      {/* Terminal */}
-      <div className="w-full max-w-2xl relative">
-        <div className="bg-zinc-950/80 border border-white/5 rounded-[2.5rem] p-10 backdrop-blur-3xl shadow-2xl">
-          <textarea 
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            className="w-full bg-transparent border-none text-xl font-light text-zinc-300 placeholder-zinc-800 focus:ring-0 mb-8 resize-none min-h-[160px]"
-            placeholder="Injecte ton hook ici..."
-          />
+      <div className="relative z-10 w-full max-w-lg">
+        {/* Header Section */}
+        <div className="flex justify-between items-end mb-4 px-2">
+          <div>
+            <h1 className="text-[10px] tracking-[0.4em] text-cyan-500/60 font-bold uppercase">Neural_Processor_v31</h1>
+            <p className="text-2xl font-light tracking-tighter text-white">Status: <span className="font-medium">Active</span></p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] text-zinc-600 uppercase">Retention_Probability</p>
+            <p className="text-3xl font-black italic text-white leading-none">{score}%</p>
+          </div>
+        </div>
+
+        {/* Main Terminal Box */}
+        <div className="relative group">
+          <div className="absolute -inset-[1px] bg-gradient-to-b from-cyan-500/20 to-transparent rounded-3xl" />
           
-          <div className="flex gap-[2px] h-1 w-full bg-zinc-900 mb-8 rounded-full overflow-hidden">
-            {heatmap.map((val, i) => (
-              <div key={i} style={{ width: `${100/heatmap.length}%`, opacity: val/100 }} className="h-full bg-cyan-600" />
-            ))}
-          </div>
+          <div className="relative bg-zinc-900/40 backdrop-blur-xl border border-white/5 rounded-3xl p-8 neon-glow">
+            <textarea 
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              className="w-full h-48 bg-transparent border-none text-zinc-200 text-lg font-light placeholder-zinc-800 focus:ring-0 resize-none"
+              placeholder="Injecter le script d'influence..."
+            />
 
-          <div className="flex justify-between items-center">
-            <div className="text-[9px] text-zinc-600 uppercase tracking-tighter">
-              v31.4_RAPTURE // <span className="text-emerald-500">Online</span>
+            {/* Heatmap Audio/Visuelle */}
+            <div className="flex gap-[2px] h-1.5 w-full bg-zinc-950/50 rounded-full overflow-hidden my-6">
+              {heatmap.map((val, i) => (
+                <div 
+                  key={i} 
+                  style={{ width: `${100/heatmap.length}%`, height: '100%', opacity: val/100 }} 
+                  className="bg-cyan-400 transition-all duration-500" 
+                />
+              ))}
             </div>
-            <button 
-              onClick={handleManifest}
-              disabled={isRendering}
-              className="group relative px-12 py-4 bg-white rounded-full overflow-hidden transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
-            >
-              <span className="relative z-10 text-black font-black text-[10px] uppercase tracking-[0.3em]">
-                {isRendering ? 'Processing...' : 'Manifest'}
-              </span>
-              <div className="absolute inset-0 bg-cyan-400 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-            </button>
+
+            <div className="flex items-center justify-between">
+              <div className="flex gap-2">
+                <div className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
+                <span className="text-[9px] text-zinc-500 uppercase tracking-widest">I/O_Streaming</span>
+              </div>
+
+              <button 
+                onClick={() => setIsRendering(true)}
+                disabled={isRendering}
+                className="relative px-8 py-3 bg-white hover:bg-cyan-400 transition-colors rounded-full group overflow-hidden"
+              >
+                <span className="relative z-10 text-black font-bold text-[10px] uppercase tracking-widest">
+                  {isRendering ? 'Processing...' : 'Manifest'}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Footer Data */}
+        <div className="mt-8 grid grid-cols-3 gap-4 px-4">
+          {[
+            { label: 'Latency', val: '12ms' },
+            { label: 'Sync', val: 'Neural' },
+            { label: 'Core', val: 'Rapture' }
+          ].map((stat, i) => (
+            <div key={i} className="border-l border-zinc-800 pl-3">
+              <p className="text-[8px] uppercase text-zinc-600">{stat.label}</p>
+              <p className="text-xs font-medium text-zinc-400">{stat.val}</p>
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
+    </main>
   );
-        }
+}
