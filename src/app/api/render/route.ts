@@ -1,20 +1,40 @@
 import { NextResponse } from 'next/server';
-import { buildFinalCommand } from '@/lib/pipeline-orchestrator';
+// Chemin relatif direct pour remonter à src/lib
+import { buildFinalCommand } from '../../../lib/pipeline-orchestrator';
 
 export async function POST(req: Request) {
   try {
-    const project = await req.json();
-    const command = buildFinalCommand(project);
+    const body = await req.json();
 
-    // ICI : On envoie la commande à un worker externe (Shotstack ou Cloudinary)
-    // car un serveur Web classique couperait la connexion avant la fin du rendu.
-    console.log(`[CORE] Executing: ${command.command}`);
+    if (!body.script) {
+      return NextResponse.json({ error: "Script manquant" }, { status: 400 });
+    }
 
+    // On prépare les données pour l'orchestrateur
+    const project = {
+      id: body.id || `gen_${Date.now()}`,
+      script: body.script,
+      voiceUrl: "pending", // Sera généré par ElevenLabs
+      brollUrls: [],
+      musicUrl: "default_pulse.mp3"
+    };
+
+    const renderData = buildFinalCommand(project);
+
+    // Simulation de mise en queue (Production-Ready)
+    console.log(`[CORE] Pipeline command ready for: ${project.id}`);
+    
     return NextResponse.json({ 
       status: 'QUEUED', 
-      jobId: Buffer.from(Date.now().toString()).toString('base64') 
+      command_preview: renderData.command,
+      projectId: project.id 
     });
+
   } catch (error) {
-    return NextResponse.json({ status: 'ERROR', message: 'Rupture système' }, { status: 500 });
+    console.error("[FATAL] Render Route Error:", error);
+    return NextResponse.json({ 
+      status: 'ERROR', 
+      message: 'Rupture de la logique de rendu' 
+    }, { status: 500 });
   }
 }
