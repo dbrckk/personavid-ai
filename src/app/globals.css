@@ -1,3 +1,13 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: black;
+  color: white;
+  margin: 0;
+}
