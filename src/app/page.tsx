@@ -8,7 +8,7 @@ export default function NeuralRapturePage() {
   const [input, setInput] = useState('');
   const [isRendering, setIsRendering] = useState(false);
   const [videoResult, setVideoResult] = useState<string | null>(null);
-  const [status, setStatus] = useState('IDLE');
+  const [status, setStatus] = useState('SYSTEM_READY');
 
   const handleManifest = async () => {
     if (!input) return;
@@ -17,7 +17,6 @@ export default function NeuralRapturePage() {
     setStatus('ANALYZING_NEURAL_FLUX...');
     
     try {
-      // 1. ANALYSE IA (Appel API)
       const response = await fetch('/api/render', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -27,7 +26,6 @@ export default function NeuralRapturePage() {
       const assets = await response.json();
       setStatus('RENDERING_MANIFEST...');
 
-      // 2. RENDU FFmpeg (Client-side)
       const blob = await renderManifest(assets);
       const url = URL.createObjectURL(blob);
       
@@ -42,39 +40,64 @@ export default function NeuralRapturePage() {
   };
 
   return (
-    <main className="relative min-h-screen flex flex-col items-center justify-center p-8 bg-[#020202] text-white">
-      <div className="absolute top-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
+    <main className="relative min-h-screen flex flex-col items-center justify-center p-6 bg-[#010101] text-zinc-100">
+      {/* Ligne de scan plus discrète */}
+      <div className="absolute top-0 w-full h-[2px] bg-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.5)]" />
       
       <div className="w-full max-w-2xl">
-        <div className="bg-zinc-900/20 border border-white/5 backdrop-blur-2xl rounded-[2rem] p-8 shadow-2xl neon-glow">
-          <div className="flex justify-between items-center mb-6">
-            <span className="text-[10px] font-bold text-cyan-500 tracking-[0.5em] uppercase">v31.4_Rapture</span>
-            <span className="text-[9px] text-zinc-600 font-mono">{status}</span>
-          </div>
-
-          <textarea 
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            className="w-full h-40 bg-transparent border-none text-zinc-300 text-lg font-light placeholder-zinc-800 focus:ring-0 resize-none p-0"
-            placeholder="Injecter le script d'influence..."
-          />
-
-          <button 
-            onClick={handleManifest}
-            disabled={isRendering}
-            className={`w-full py-4 rounded-xl font-bold text-[10px] uppercase tracking-[0.3em] transition-all mt-6
-              ${isRendering ? 'bg-zinc-800 text-zinc-500 cursor-wait' : 'bg-white text-black hover:bg-cyan-400 hover:scale-[1.01]'}`}
-          >
-            {isRendering ? 'Processing...' : 'Manifest'}
-          </button>
+        {/* Header - Texte plus lisible (Zinc-400) */}
+        <div className="flex justify-between items-end mb-4 px-2">
+          <span className="text-[10px] font-bold text-cyan-400 tracking-[0.5em] uppercase">v31.4_Rapture</span>
+          <span className="text-[10px] text-zinc-500 font-mono font-bold tracking-widest uppercase">
+            Status // <span className={isRendering ? "text-amber-500" : "text-emerald-500"}>{status}</span>
+          </span>
         </div>
 
+        <div className="relative bg-zinc-900/40 border border-white/10 backdrop-blur-3xl rounded-3xl p-1 shadow-2xl">
+          {/* Zone de saisie - Contraste renforcé */}
+          <div className="bg-black/40 rounded-[1.4rem] p-6">
+            <textarea 
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              className="w-full h-48 bg-transparent border-none text-white text-xl font-light placeholder-zinc-700 focus:ring-0 resize-none p-0 leading-relaxed"
+              placeholder="Injecter le script d'influence ici..."
+            />
+            
+            {/* Heatmap avec couleurs plus vives */}
+            <div className="flex gap-[1px] h-1.5 w-full bg-white/5 mt-6 rounded-full overflow-hidden">
+              {getPredictiveHeatmap(input || " ").map((v, i) => (
+                <div key={i} style={{ width: `${100/20}%`, opacity: (v/100) + 0.2 }} className="bg-cyan-400" />
+              ))}
+            </div>
+          </div>
+
+          <div className="p-4">
+            <button 
+              onClick={handleManifest}
+              disabled={isRendering}
+              className={`w-full py-5 rounded-2xl font-black text-xs uppercase tracking-[0.4em] transition-all
+                ${isRendering 
+                  ? 'bg-zinc-800 text-zinc-500 cursor-wait' 
+                  : 'bg-white text-black hover:bg-cyan-400 active:scale-95'}`}
+            >
+              {isRendering ? 'Synchronisation...' : 'Lancer Manifestation'}
+            </button>
+          </div>
+        </div>
+
+        {/* Preview Section */}
         {videoResult && (
-          <div className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <video src={videoResult} controls className="w-full rounded-2xl border border-cyan-500/30 shadow-2xl" />
+          <div className="mt-8 animate-in zoom-in-95 duration-500">
+            <div className="p-1 bg-gradient-to-b from-cyan-500/20 to-transparent rounded-3xl">
+              <video src={videoResult} controls className="w-full rounded-[1.4rem] shadow-2xl" />
+            </div>
           </div>
         )}
       </div>
+
+      <footer className="mt-12 opacity-30">
+        <p className="text-[9px] tracking-[1em] uppercase">User_Authorized: Drackk-20</p>
+      </footer>
     </main>
   );
-}
+          }
