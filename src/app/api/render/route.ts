@@ -1,14 +1,28 @@
-import { NextResponse } from 'next/server';
-import { generateNeuralScript } from '@/lib/ai-engine'; // Vérifie l'import
+import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const { prompt } = await req.json();
-    const config = await generateNeuralScript(prompt);
-    
-    // On renvoie un objet complet au frontend
-    return NextResponse.json({ config });
-  } catch (error) {
-    return NextResponse.json({ error: "API_CRASH" }, { status: 500 });
+
+    if (!prompt) {
+      return NextResponse.json({
+        error: "Missing prompt",
+      });
+    }
+
+    // ⚠️ FAKE PIPELINE TEMPORAIRE (à remplacer ensuite)
+    // ici on simule un rendu vidéo
+
+    const videoUrl = "/demo.mp4";
+    const audioUrl = "/demo.mp3";
+
+    return NextResponse.json({
+      videoUrl,
+      audioUrl,
+    });
+  } catch (e) {
+    return NextResponse.json({
+      error: "Render failed",
+    });
   }
 }
