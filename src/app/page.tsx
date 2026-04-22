@@ -1,81 +1,108 @@
+/**
+ * UI v31 "VOID-CONTROL"
+ * Interface de déploiement de la Neural Rapture
+ */
 "use client";
-import { useState } from 'react';
-import { generateScript } from '@/lib/ai-engine';
-import { createTikTokVideo } from '@/lib/video-core';
 
-export default function App() {
-  const [loading, setLoading] = useState(false);
-  const [videoUrl, setVideoUrl] = useState("");
+import React, { useState, useEffect, useRef } from 'react';
+import { getPredictiveHeatmap } from '@/lib/retention-agent';
 
-  const runPipeline = async (e: any) => {
-    e.preventDefault();
-    setLoading(true);
-    
-    const formData = new FormData(e.target);
-    const subject = formData.get('subject') as string;
-    const persona = formData.get('persona') as string;
-    const time = formData.get('duration') as string;
-
-    try {
-      // 1. Script via Gemini
-      const text = await generateScript(subject, persona, parseInt(time));
-      
-      // 2. Audio via ElevenLabs (Free tier)
-      const voiceRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/ID_VOIX`, {
-        method: 'POST',
-        headers: { 'xi-api-key': 'TA_CLE_GRATUITE', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, model_id: "eleven_multilingual_v2" })
-      });
-      const audioBlob = await voiceRes.blob();
-
-      // 3. Image via Pollinations (Gratuit)
-      const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(subject)}?width=1080&height=1920&nologo=true`;
-
-      // 4. Montage Final
-      const finalVideo = await createTikTokVideo(audioBlob, imageUrl, parseInt(time));
-      setVideoUrl(URL.createObjectURL(finalVideo));
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+export default function NeuralRapturePage() {
+  const [input, setInput] = useState('');
+  const [isRendering, setIsRendering] = useState(false);
+  const [retentionScore, setRetentionScore] = useState(99.1);
+  const heatmap = getPredictiveHeatmap(input || "Prompt initialisation...");
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white p-5 flex flex-col items-center">
-      <div className="w-full max-w-md">
-        <h1 className="text-2xl font-black mb-6 text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-violet-500">
-          PERSONA STUDIO AI
-        </h1>
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 font-mono selection:bg-cyan-500 overflow-hidden">
+      
+      {/* Radar de Rétention Bio-Métrique */}
+      <div className="relative w-72 h-72 mb-16 group">
+        <div className="absolute inset-0 border border-cyan-500/20 rounded-full animate-ping duration-[3s]"></div>
+        <div className="absolute inset-0 border border-cyan-500/5 rounded-full scale-150"></div>
         
-        <form onSubmit={runPipeline} className="space-y-4">
-          <textarea name="subject" placeholder="Sujet de la vidéo..." className="w-full h-32 bg-zinc-900 border-none rounded-2xl p-4 focus:ring-2 ring-pink-500" required />
-          
-          <select name="persona" className="w-full bg-zinc-900 border-none rounded-xl p-3">
-            <option value="seductive">Séductive</option>
-            <option value="innocent">Innocente / Timide</option>
-            <option value="dominant">Dominatrice</option>
-          </select>
+        {/* Visualizer circulaire (SVG) */}
+        <svg className="absolute inset-0 w-full h-full rotate-[-90deg]">
+          <circle
+            cx="144" cy="144" r="120"
+            fill="transparent"
+            stroke="rgba(6, 182, 212, 0.1)"
+            strokeWidth="2"
+          />
+          <circle
+            cx="144" cy="144" r="120"
+            fill="transparent"
+            stroke="cyan"
+            strokeWidth="2"
+            strokeDasharray="753.6"
+            strokeDashoffset={753.6 - (753.6 * retentionScore) / 100}
+            className="transition-all duration-1000 ease-out"
+          />
+        </svg>
 
-          <div className="flex justify-between text-xs text-gray-400 px-1">
-            <span>27s</span>
-            <span>Durée</span>
-            <span>70s</span>
-          </div>
-          <input type="range" name="duration" min="27" max="70" className="w-full accent-pink-500" />
-
-          <button disabled={loading} className="w-full py-4 bg-white text-black font-bold rounded-full hover:bg-pink-500 hover:text-white transition-all uppercase tracking-widest shadow-xl">
-            {loading ? "Calcul en cours..." : "Générer Vidéo"}
-          </button>
-        </form>
-
-        {videoUrl && (
-          <div className="mt-8 flex flex-col items-center">
-            <video src={videoUrl} controls className="w-[280px] h-[500px] rounded-3xl border-4 border-zinc-800 object-cover shadow-2xl" />
-            <a href={videoUrl} download="tiktok_ai.mp4" className="mt-4 text-pink-500 font-bold underline">Télécharger l'original</a>
-          </div>
-        )}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-[9px] text-cyan-500 tracking-[0.6em] mb-1 opacity-50">ATTENTION_FLUX</span>
+          <span className="text-4xl font-black text-white italic drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+            {retentionScore}%
+          </span>
+        </div>
       </div>
+
+      {/* Terminal de Commande */}
+      <div className="w-full max-w-2xl relative">
+        <div className="absolute -top-6 left-10 text-[8px] text-zinc-700 tracking-[0.4em] uppercase">
+          Neural_Input_Terminal // Drackk-20
+        </div>
+        
+        <div className="bg-zinc-950/80 border border-white/5 rounded-[2.5rem] p-10 backdrop-blur-3xl shadow-2xl relative">
+          <textarea 
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            className="w-full bg-transparent border-none text-xl font-light text-zinc-300 placeholder-zinc-800 focus:ring-0 mb-8 resize-none min-h-[160px] leading-relaxed"
+            placeholder="Injecte ta pensée. L'algorithme fera le reste."
+          />
+          
+          {/* Heatmap de Rétention Prédictive */}
+          <div className="flex gap-[2px] h-1 w-full bg-zinc-900 mb-8 rounded-full overflow-hidden">
+            {heatmap.map((val, i) => (
+              <div 
+                key={i} 
+                style={{ width: `${100/heatmap.length}%`, opacity: val/100 }} 
+                className={`h-full ${val < 40 ? 'bg-red-600 animate-pulse' : 'bg-cyan-600'}`}
+              />
+            ))}
+          </div>
+
+          <div className="flex justify-between items-center">
+            <div className="flex gap-4">
+              <div className="flex flex-col">
+                <span className="text-[7px] text-zinc-600 uppercase">Engine</span>
+                <span className="text-[9px] text-zinc-400 font-bold tracking-tighter">v31.4_RAPTURE</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[7px] text-zinc-600 uppercase">Status</span>
+                <span className="text-[9px] text-emerald-500 font-bold tracking-tighter uppercase">Ready</span>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => setIsRendering(true)}
+              disabled={isRendering}
+              className="group relative px-12 py-4 bg-white rounded-full overflow-hidden transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+            >
+              <span className="relative z-10 text-black font-black text-[10px] uppercase tracking-[0.3em]">
+                {isRendering ? 'Processing...' : 'Manifest'}
+              </span>
+              <div className="absolute inset-0 bg-cyan-400 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <footer className="mt-16 text-[8px] text-zinc-800 uppercase tracking-[1.2em] font-bold">
+        Drackk-20 // 2026 // Beyond Reality
+      </footer>
     </div>
   );
-    }
+                }
+      
