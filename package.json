@@ -15,7 +15,8 @@
     "react-dom": "^18",
     "lucide-react": "^0.284.0",
     "clsx": "^2.0.0",
-    "tailwind-merge": "^1.14.0"
+    "tailwind-merge": "^1.14.0",
+    "@google/generative-ai": "^0.1.0"
   },
   "devDependencies": {
     "typescript": "^5",
