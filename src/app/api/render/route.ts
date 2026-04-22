@@ -1,40 +1,28 @@
 import { NextResponse } from 'next/server';
-// Chemin relatif direct pour remonter à src/lib
-import { buildFinalCommand } from '../../../lib/pipeline-orchestrator';
+import { generateNeuralScript } from '@/lib/ai-engine';
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const { prompt } = await req.json();
 
-    if (!body.script) {
-      return NextResponse.json({ error: "Script manquant" }, { status: 400 });
+    if (!prompt) {
+      return NextResponse.json({ error: "Input requis" }, { status: 400 });
     }
 
-    // On prépare les données pour l'orchestrateur
-    const project = {
-      id: body.id || `gen_${Date.now()}`,
-      script: body.script,
-      voiceUrl: "pending", // Sera généré par ElevenLabs
-      brollUrls: [],
-      musicUrl: "default_pulse.mp3"
+    // Appel réel à Gemini
+    const config = await generateNeuralScript(prompt);
+
+    // Ici, on définit tes vrais assets basés sur l'analyse de l'IA
+    // Pour l'instant, on lie tes fichiers de référence
+    const assets = {
+      videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4', // À remplacer par tes MP4 sur S3/Vercel Blob
+      audioUrl: 'https://www.w3schools.com/html/horse.mp3',   // À remplacer par tes MP3
+      config: config
     };
 
-    const renderData = buildFinalCommand(project);
-
-    // Simulation de mise en queue (Production-Ready)
-    console.log(`[CORE] Pipeline command ready for: ${project.id}`);
-    
-    return NextResponse.json({ 
-      status: 'QUEUED', 
-      command_preview: renderData.command,
-      projectId: project.id 
-    });
-
+    return NextResponse.json(assets);
   } catch (error) {
-    console.error("[FATAL] Render Route Error:", error);
-    return NextResponse.json({ 
-      status: 'ERROR', 
-      message: 'Rupture de la logique de rendu' 
-    }, { status: 500 });
+    console.error("ERREUR_API_ROUTE:", error);
+    return NextResponse.json({ error: "Échec du traitement neural" }, { status: 500 });
   }
 }
