@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { generateNeuralScript } from "@/lib/ai-engine";
 
 type PexelsVideoFile = {
   id: number;
@@ -19,59 +20,87 @@ type PexelsVideo = {
   video_files: PexelsVideoFile[];
 };
 
-function buildShortScript(prompt: string) {
-  const clean = String(prompt || "").trim();
+function cleanPrompt(prompt: unknown) {
+  return String(prompt || "").trim().slice(0, 800);
+}
 
-  if (!clean) {
-    return "";
-  }
+function buildVoiceScript(prompt: string, config: any) {
+  const intensity = config?.intensite || "High";
 
   return [
-    `Stop scrolling.`,
-    `${clean}.`,
-    `Here is the key idea in simple words.`,
-    `Use this now if you want faster results.`,
+    "Stop scrolling.",
+    prompt,
+    "This is the part most people ignore.",
+    "But it changes everything when you understand it.",
+    `Intensity level: ${intensity}.`,
+    "Save this before you forget it.",
   ].join(" ");
 }
 
-function pickBestVerticalVideo(videos: PexelsVideo[]): string | null {
-  for (const video of videos) {
-    const sorted = [...video.video_files].sort((a, b) => {
-      const aScore = Math.abs((a.height / Math.max(a.width, 1)) - (16 / 9));
-      const bScore = Math.abs((b.height / Math.max(b.width, 1)) - (16 / 9));
-      return aScore - bScore;
-    });
+function getPexelsSearchQuery(prompt: string) {
+  const text = prompt.toLowerCase();
 
-    const best = sorted.find(
-      (file) =>
-        file.file_type === "video/mp4" &&
-        file.width >= 720 &&
-        file.height >= 1280
-    );
-
-    if (best?.link) {
-      return best.link;
-    }
-
-    const fallback = sorted.find((file) => file.file_type === "video/mp4");
-    if (fallback?.link) {
-      return fallback.link;
-    }
+  if (text.includes("money") || text.includes("business") || text.includes("argent")) {
+    return "business success";
   }
 
-  return null;
+  if (text.includes("fitness") || text.includes("sport") || text.includes("muscle")) {
+    return "fitness motivation";
+  }
+
+  if (text.includes("ai") || text.includes("tech") || text.includes("intelligence")) {
+    return "technology futuristic";
+  }
+
+  if (text.includes("motivation") || text.includes("discipline")) {
+    return "discipline motivation";
+  }
+
+  return "cinematic lifestyle";
 }
 
-async function generateElevenLabsAudio(text: string) {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
-  const voiceId = process.env.ELEVENLABS_VOICE_ID;
+function pickBestVerticalVideo(videos: PexelsVideo[]) {
+  const allFiles = videos.flatMap((video) =>
+    video.video_files.map((file) => ({
+      ...file,
+      duration: video.duration,
+    }))
+  );
+
+  const mp4Files = allFiles.filter((file) => file.file_type === "video/mp4");
+
+  const verticalFiles = mp4Files.filter(
+    (file) => file.height >= file.width && file.height >= 1280
+  );
+
+  const candidates = verticalFiles.length > 0 ? verticalFiles : mp4Files;
+
+  const sorted = candidates.sort((a, b) => {
+    const aVerticalScore = a.height / Math.max(a.width, 1);
+    const bVerticalScore = b.height / Math.max(b.width, 1);
+
+    const aSizeScore = a.width * a.height;
+    const bSizeScore = b.width * b.height;
+
+    return bVerticalScore - aVerticalScore || bSizeScore - aSizeScore;
+  });
+
+  return sorted[0]?.link || null;
+}
+
+async function generateElevenLabsAudio(script: string) {
+  const apiKey =
+    process.env.ELEVENLABS_API_KEY ||
+    process.env.ELEVEN_LABS_KEY ||
+    "";
+
+  const voiceId =
+    process.env.ELEVENLABS_VOICE_ID ||
+    process.env.ELEVEN_LABS_VOICE_ID ||
+    "21m00Tcm4TlvDq8ikWAM";
 
   if (!apiKey) {
-    throw new Error("ELEVENLABS_API_KEY missing");
-  }
-
-  if (!voiceId) {
-    throw new Error("ELEVENLABS_VOICE_ID missing");
+    throw new Error("ELEVENLABS_API_KEY missing in Vercel environment variables");
   }
 
   const response = await fetch(
@@ -83,11 +112,11 @@ async function generateElevenLabsAudio(text: string) {
         "xi-api-key": apiKey,
       },
       body: JSON.stringify({
-        text,
+        text: script,
         model_id: "eleven_multilingual_v2",
         voice_settings: {
-          stability: 0.35,
-          similarity_boost: 0.85,
+          stability: 0.34,
+          similarity_boost: 0.88,
           style: 0.55,
           use_speaker_boost: true,
         },
@@ -97,29 +126,31 @@ async function generateElevenLabsAudio(text: string) {
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`ElevenLabs error: ${response.status} ${errorText}`);
+    throw new Error(`ElevenLabs failed: ${response.status} ${errorText}`);
   }
 
-  const arrayBuffer = await response.arrayBuffer();
-  const base64Audio = Buffer.from(arrayBuffer).toString("base64");
+  const audioBuffer = await response.arrayBuffer();
+  const base64Audio = Buffer.from(audioBuffer).toString("base64");
 
   return `data:audio/mpeg;base64,${base64Audio}`;
 }
 
-async function searchPexelsVideo(query: string) {
-  const apiKey = process.env.PEXELS_API_KEY;
+async function searchPexelsVideo(prompt: string) {
+  const apiKey = process.env.PEXELS_API_KEY || "";
 
   if (!apiKey) {
     return "/demo.mp4";
   }
 
+  const query = getPexelsSearchQuery(prompt);
   const url = new URL("https://api.pexels.com/videos/search");
+
   url.searchParams.set("query", query);
-  url.searchParams.set("per_page", "10");
   url.searchParams.set("orientation", "portrait");
-  url.searchParams.set("size", "medium");
+  url.searchParams.set("per_page", "12");
 
   const response = await fetch(url.toString(), {
+    method: "GET",
     headers: {
       Authorization: apiKey,
     },
@@ -131,16 +162,16 @@ async function searchPexelsVideo(query: string) {
   }
 
   const data = await response.json();
-  const videos = Array.isArray(data?.videos) ? (data.videos as PexelsVideo[]) : [];
-  const best = pickBestVerticalVideo(videos);
+  const videos = Array.isArray(data?.videos) ? data.videos : [];
+  const bestVideo = pickBestVerticalVideo(videos);
 
-  return best || "/demo.mp4";
+  return bestVideo || "/demo.mp4";
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const prompt = String(body?.prompt || "").trim();
+    const prompt = cleanPrompt(body?.prompt);
 
     if (!prompt) {
       return NextResponse.json(
@@ -151,16 +182,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const script = buildShortScript(prompt);
-
-    if (!script) {
-      return NextResponse.json(
-        {
-          error: "Invalid prompt",
-        },
-        { status: 400 }
-      );
-    }
+    const config = await generateNeuralScript(prompt);
+    const script = buildVoiceScript(prompt, config);
 
     const [audioUrl, videoUrl] = await Promise.all([
       generateElevenLabsAudio(script),
@@ -168,19 +191,22 @@ export async function POST(req: NextRequest) {
     ]);
 
     return NextResponse.json({
+      ok: true,
       prompt,
       script,
-      audioUrl,
+      config,
       videoUrl,
+      audioUrl,
     });
   } catch (error: any) {
-    console.error("Render route failed:", error);
+    console.error("RENDER_API_CRASH:", error);
 
     return NextResponse.json(
       {
-        error: error?.message || "Render failed",
+        ok: false,
+        error: error?.message || "API_CRASH",
       },
       { status: 500 }
     );
   }
-}
+  }
