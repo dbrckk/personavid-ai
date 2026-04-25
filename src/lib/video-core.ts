@@ -10,7 +10,7 @@ async function loadFFmpegCore() {
   const ffmpeg = new FFmpeg();
 
   ffmpeg.on("log", ({ message }) => {
-    console.log(`[FFMPEG_CORE] ${message}`);
+    console.log(`[FFMPEG] ${message}`);
   });
 
   await ffmpeg.load({
@@ -28,9 +28,7 @@ async function loadFFmpegCore() {
 }
 
 export async function getFFmpeg(): Promise<FFmpeg> {
-  if (ffmpegInstance) {
-    return ffmpegInstance;
-  }
+  if (ffmpegInstance) return ffmpegInstance;
 
   if (!ffmpegLoadingPromise) {
     ffmpegLoadingPromise = loadFFmpegCore()
@@ -55,11 +53,11 @@ function buildSafeId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-async function safeDelete(ffmpeg: FFmpeg, path: string) {
+async function safeDelete(ffmpeg: FFmpeg, file: string) {
   try {
-    await ffmpeg.deleteFile(path);
+    await ffmpeg.deleteFile(file);
   } catch {
-    // ignore
+    // ignore cleanup errors
   }
 }
 
@@ -68,59 +66,83 @@ export async function renderManifest({
   audioUrl,
 }: RenderManifestInput): Promise<Blob> {
   if (!videoUrl || typeof videoUrl !== "string") {
-    throw new Error("renderManifest: invalid videoUrl");
+    throw new Error("Invalid videoUrl");
   }
 
   if (!audioUrl || typeof audioUrl !== "string") {
-    throw new Error("renderManifest: invalid audioUrl");
+    throw new Error("Invalid audioUrl");
   }
 
   const ffmpeg = await getFFmpeg();
+
   const jobId = buildSafeId();
 
-  const inputVideo = `video-${jobId}.mp4`;
-  const inputAudio = `audio-${jobId}.mp3`;
-  const outputVideo = `output-${jobId}.mp4`;
+  const inputVideo = `input-video-${jobId}.mp4`;
+  const inputAudio = `input-audio-${jobId}.mp3`;
+  const outputVideo = `final-tiktok-${jobId}.mp4`;
 
   try {
-    const videoData = await fetchFile(videoUrl);
-    const audioData = await fetchFile(audioUrl);
+    const [videoData, audioData] = await Promise.all([
+      fetchFile(videoUrl),
+      fetchFile(audioUrl),
+    ]);
 
     await ffmpeg.writeFile(inputVideo, videoData);
     await ffmpeg.writeFile(inputAudio, audioData);
 
     await ffmpeg.exec([
+      "-stream_loop",
+      "-1",
       "-i",
       inputVideo,
       "-i",
       inputAudio,
+
+      "-vf",
+      "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920",
+
       "-map",
       "0:v:0",
       "-map",
       "1:a:0",
+
       "-c:v",
-      "copy",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-crf",
+      "23",
+      "-pix_fmt",
+      "yuv420p",
+
       "-c:a",
       "aac",
       "-b:a",
       "192k",
+      "-ar",
+      "44100",
+
+      "-shortest",
       "-movflags",
       "+faststart",
-      "-shortest",
+
       outputVideo,
     ]);
 
     const data = await ffmpeg.readFile(outputVideo);
 
-    return new Blob([data], { type: "video/mp4" });
+    return new Blob([data], {
+      type: "video/mp4",
+    });
   } catch (error: any) {
-    console.error("renderManifest failed:", error);
+    console.error("VIDEO_CORE_RENDER_FAILED:", error);
+
     throw new Error(
-      error?.message || "FFmpeg merge failed while creating final video"
+      error?.message || "Failed to create final TikTok video"
     );
   } finally {
     await safeDelete(ffmpeg, inputVideo);
     await safeDelete(ffmpeg, inputAudio);
     await safeDelete(ffmpeg, outputVideo);
   }
-}
+      }
