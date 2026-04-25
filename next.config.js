@@ -1,32 +1,23 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Configuration pour permettre l'utilisation de SharedArrayBuffer (requis pour FFmpeg.wasm)
+  reactStrictMode: true,
+
   async headers() {
     return [
       {
-        source: '/(.*)',
+        source: "/:path*",
         headers: [
           {
-            key: 'Cross-Origin-Embedder-Policy',
-            value: 'require-corp',
+            key: "Cross-Origin-Opener-Policy",
+            value: "same-origin",
           },
           {
-            key: 'Cross-Origin-Opener-Policy',
-            value: 'same-origin',
+            key: "Cross-Origin-Embedder-Policy",
+            value: "require-corp",
           },
         ],
       },
     ];
-  },
-  
-  // Optimisation du build pour la v31 "Neural-Rapture"
-  typescript: {
-    // Permet de déployer même s'il reste de petites alertes de types non critiques
-    ignoreBuildErrors: false, 
-  },
-  eslint: {
-    // Vérification rigoureuse avant la mise en ligne
-    ignoreDuringBuilds: false,
   },
 };
 
