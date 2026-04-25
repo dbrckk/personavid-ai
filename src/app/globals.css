@@ -2,31 +2,105 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  body {
-    @apply bg-[#030303] text-zinc-400 antialiased overflow-hidden;
-    font-feature-settings: "ss01", "ss03", "cv01";
+/* RESET */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  background: #010101;
+  color: #e5e7eb;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* SCROLLBAR */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #050505;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(6, 182, 212, 0.4);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(6, 182, 212, 0.7);
+}
+
+/* TEXTAREA */
+textarea::placeholder {
+  color: #3f3f46;
+}
+
+/* BUTTON EFFECT */
+button {
+  will-change: transform;
+}
+
+button:active {
+  transform: scale(0.96);
+}
+
+/* GLASS UI */
+.glass {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* CYAN GLOW */
+.glow-cyan {
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.4),
+              0 0 40px rgba(6, 182, 212, 0.15);
+}
+
+/* ANIMATIONS */
+@keyframes pulseSoft {
+  0% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.6;
   }
 }
 
-/* Effet de balayage CRT */
-.scanline {
-  width: 100%;
-  height: 2px;
-  background: rgba(0, 240, 255, 0.1);
-  position: absolute;
-  animation: scan 4s linear infinite;
-  z-index: 50;
-  pointer-events: none;
+.pulse-soft {
+  animation: pulseSoft 2.5s infinite ease-in-out;
 }
 
-@keyframes scan {
-  0% { top: -10%; }
-  100% { top: 110%; }
+/* VIDEO */
+video {
+  background: black;
+  max-height: 80vh;
 }
 
-/* Glow néon */
-.neon-glow {
-  box-shadow: 0 0 20px rgba(0, 240, 255, 0.15), inset 0 0 10px rgba(0, 240, 255, 0.05);
-                            }
-    
+/* STATUS COLORS */
+.status-ok {
+  color: #10b981;
+}
+
+.status-warn {
+  color: #f59e0b;
+}
+
+.status-error {
+  color: #ef4444;
+}
+
+/* MICRO DETAILS */
+::selection {
+  background: rgba(6, 182, 212, 0.3);
+}
