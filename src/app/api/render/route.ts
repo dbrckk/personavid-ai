@@ -52,34 +52,19 @@ function buildVoiceScript(prompt: string, config: any) {
 function getPexelsSearchQuery(prompt: string) {
   const text = prompt.toLowerCase();
 
-  if (
-    text.includes("money") ||
-    text.includes("business") ||
-    text.includes("argent")
-  ) {
+  if (text.includes("money") || text.includes("business") || text.includes("argent")) {
     return "business success";
   }
 
-  if (
-    text.includes("fitness") ||
-    text.includes("sport") ||
-    text.includes("muscle")
-  ) {
+  if (text.includes("fitness") || text.includes("sport") || text.includes("muscle")) {
     return "fitness motivation";
   }
 
-  if (
-    text.includes("ai") ||
-    text.includes("ia") ||
-    text.includes("tech")
-  ) {
+  if (text.includes("ai") || text.includes("ia") || text.includes("tech")) {
     return "technology futuristic";
   }
 
-  if (
-    text.includes("motivation") ||
-    text.includes("discipline")
-  ) {
+  if (text.includes("motivation") || text.includes("discipline")) {
     return "discipline motivation";
   }
 
@@ -105,7 +90,6 @@ function pickBestVerticalVideo(videos: PexelsVideo[]) {
   const sorted = candidates.sort((a, b) => {
     const aVerticalScore = a.height / Math.max(a.width, 1);
     const bVerticalScore = b.height / Math.max(b.width, 1);
-
     const aSizeScore = a.width * a.height;
     const bSizeScore = b.width * b.height;
 
@@ -115,46 +99,60 @@ function pickBestVerticalVideo(videos: PexelsVideo[]) {
   return sorted[0]?.link || null;
 }
 
-async function generateFreeTtsAudio(script: string) {
-  const response = await fetch("https://freetts.org/api/tts", {
+async function generateColabF5Audio(script: string) {
+  const baseUrl = process.env.COLAB_TTS_URL;
+
+  if (!baseUrl) {
+    throw new Error("COLAB_TTS_URL missing in Vercel environment variables");
+  }
+
+  const response = await fetch(`${baseUrl.replace(/\/$/, "")}/api/predict`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      text: script.slice(0, 1000),
-      voice: "en-US-AriaNeural",
-      rate: "-4%",
-      pitch: "-2Hz",
+      data: [
+        null,
+        "Reference voice sample",
+        script.slice(0, 1000),
+        false,
+      ],
     }),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`FreeTTS failed: ${response.status} ${errorText}`);
+    throw new Error(`Colab F5-TTS failed: ${response.status} ${errorText}`);
   }
 
-  const data = await response.json();
-  const fileId = data?.file_id;
+  const result = await response.json();
+  const audioPath =
+    result?.data?.find((item: any) => typeof item === "string" && item.includes(".wav")) ||
+    result?.data?.find((item: any) => item?.url)?.url;
 
-  if (!fileId) {
-    throw new Error("FreeTTS failed: missing file_id");
+  if (!audioPath) {
+    throw new Error("Colab F5-TTS failed: audio output not found");
   }
 
-  const audioResponse = await fetch(`https://freetts.org/api/audio/${fileId}`, {
+  const audioUrl = audioPath.startsWith("http")
+    ? audioPath
+    : `${baseUrl.replace(/\/$/, "")}/file=${audioPath}`;
+
+  const audioResponse = await fetch(audioUrl, {
     method: "GET",
     cache: "no-store",
   });
 
   if (!audioResponse.ok) {
     const errorText = await audioResponse.text();
-    throw new Error(`FreeTTS audio download failed: ${audioResponse.status} ${errorText}`);
+    throw new Error(`Colab audio download failed: ${audioResponse.status} ${errorText}`);
   }
 
   const audioBuffer = await audioResponse.arrayBuffer();
   const base64Audio = Buffer.from(audioBuffer).toString("base64");
 
-  return `data:audio/mpeg;base64,${base64Audio}`;
+  return `data:audio/wav;base64,${base64Audio}`;
 }
 
 async function searchPexelsVideo(prompt: string) {
@@ -210,14 +208,13 @@ export async function POST(req: NextRequest) {
     const subtitles = generateSubtitleSegments(script, 18);
 
     const [audioUrl, videoUrl] = await Promise.all([
-      generateFreeTtsAudio(script),
+      generateColabF5Audio(script),
       searchPexelsVideo(prompt),
     ]);
 
     return NextResponse.json({
       ok: true,
-      provider: "FreeTTS",
-      voice: "en-US-AriaNeural",
+      provider: "F5-TTS-Colab",
       prompt,
       script,
       config,
