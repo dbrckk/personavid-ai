@@ -22,39 +22,64 @@ type PexelsVideo = {
 };
 
 function cleanPrompt(prompt: unknown) {
-  return String(prompt || "").trim().slice(0, 800);
+  return String(prompt || "").trim().slice(0, 700);
 }
 
 function buildVoiceScript(prompt: string, config: any) {
-  const hook = config?.hook || "Stop scrolling.";
-  const intensity = config?.intensite || "High";
+  const hook = config?.hook || "Stop scrolling...";
 
   return [
     hook,
+    "",
+    "You think you're doing enough?",
+    "",
+    "You're not.",
+    "",
     prompt,
-    "This is the part most people ignore.",
-    "But it changes everything when you understand it.",
-    `Intensity level: ${intensity}.`,
-    "Save this before you forget it.",
-  ].join(" ");
+    "",
+    "But here's the truth...",
+    "",
+    "You're missing the part that actually matters.",
+    "",
+    "And once you understand it...",
+    "",
+    "everything changes.",
+    "",
+    "Save this.",
+  ].join("\n");
 }
 
 function getPexelsSearchQuery(prompt: string) {
   const text = prompt.toLowerCase();
 
-  if (text.includes("money") || text.includes("business") || text.includes("argent")) {
+  if (
+    text.includes("money") ||
+    text.includes("business") ||
+    text.includes("argent")
+  ) {
     return "business success";
   }
 
-  if (text.includes("fitness") || text.includes("sport") || text.includes("muscle")) {
+  if (
+    text.includes("fitness") ||
+    text.includes("sport") ||
+    text.includes("muscle")
+  ) {
     return "fitness motivation";
   }
 
-  if (text.includes("ai") || text.includes("ia") || text.includes("tech")) {
+  if (
+    text.includes("ai") ||
+    text.includes("ia") ||
+    text.includes("tech")
+  ) {
     return "technology futuristic";
   }
 
-  if (text.includes("motivation") || text.includes("discipline")) {
+  if (
+    text.includes("motivation") ||
+    text.includes("discipline")
+  ) {
     return "discipline motivation";
   }
 
@@ -90,48 +115,43 @@ function pickBestVerticalVideo(videos: PexelsVideo[]) {
   return sorted[0]?.link || null;
 }
 
-async function generateElevenLabsAudio(script: string) {
-  const apiKey =
-    process.env.ELEVENLABS_API_KEY ||
-    process.env.ELEVEN_LABS_KEY ||
-    "";
-
-  const voiceId =
-    process.env.ELEVENLABS_VOICE_ID ||
-    process.env.ELEVEN_LABS_VOICE_ID ||
-    "21m00Tcm4TlvDq8ikWAM";
-
-  if (!apiKey) {
-    throw new Error("ELEVENLABS_API_KEY missing in Vercel environment variables");
-  }
-
-  const response = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "xi-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        text: script,
-        model_id: "eleven_multilingual_v2",
-        voice_settings: {
-          stability: 0.34,
-          similarity_boost: 0.88,
-          style: 0.55,
-          use_speaker_boost: true,
-        },
-      }),
-    }
-  );
+async function generateFreeTtsAudio(script: string) {
+  const response = await fetch("https://freetts.org/api/tts", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      text: script.slice(0, 1000),
+      voice: "en-US-AriaNeural",
+      rate: "-4%",
+      pitch: "-2Hz",
+    }),
+  });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`ElevenLabs failed: ${response.status} ${errorText}`);
+    throw new Error(`FreeTTS failed: ${response.status} ${errorText}`);
   }
 
-  const audioBuffer = await response.arrayBuffer();
+  const data = await response.json();
+  const fileId = data?.file_id;
+
+  if (!fileId) {
+    throw new Error("FreeTTS failed: missing file_id");
+  }
+
+  const audioResponse = await fetch(`https://freetts.org/api/audio/${fileId}`, {
+    method: "GET",
+    cache: "no-store",
+  });
+
+  if (!audioResponse.ok) {
+    const errorText = await audioResponse.text();
+    throw new Error(`FreeTTS audio download failed: ${audioResponse.status} ${errorText}`);
+  }
+
+  const audioBuffer = await audioResponse.arrayBuffer();
   const base64Audio = Buffer.from(audioBuffer).toString("base64");
 
   return `data:audio/mpeg;base64,${base64Audio}`;
@@ -190,12 +210,14 @@ export async function POST(req: NextRequest) {
     const subtitles = generateSubtitleSegments(script, 18);
 
     const [audioUrl, videoUrl] = await Promise.all([
-      generateElevenLabsAudio(script),
+      generateFreeTtsAudio(script),
       searchPexelsVideo(prompt),
     ]);
 
     return NextResponse.json({
       ok: true,
+      provider: "FreeTTS",
+      voice: "en-US-AriaNeural",
       prompt,
       script,
       config,
@@ -214,4 +236,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-      }
+    }
