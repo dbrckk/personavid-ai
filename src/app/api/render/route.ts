@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateNeuralScript } from "@/lib/ai-engine";
+import { generateSubtitleSegments } from "@/lib/subtitle-engine";
 
 type PexelsVideoFile = {
   id: number;
@@ -25,10 +26,11 @@ function cleanPrompt(prompt: unknown) {
 }
 
 function buildVoiceScript(prompt: string, config: any) {
+  const hook = config?.hook || "Stop scrolling.";
   const intensity = config?.intensite || "High";
 
   return [
-    "Stop scrolling.",
+    hook,
     prompt,
     "This is the part most people ignore.",
     "But it changes everything when you understand it.",
@@ -48,7 +50,7 @@ function getPexelsSearchQuery(prompt: string) {
     return "fitness motivation";
   }
 
-  if (text.includes("ai") || text.includes("tech") || text.includes("intelligence")) {
+  if (text.includes("ai") || text.includes("ia") || text.includes("tech")) {
     return "technology futuristic";
   }
 
@@ -176,6 +178,7 @@ export async function POST(req: NextRequest) {
     if (!prompt) {
       return NextResponse.json(
         {
+          ok: false,
           error: "Missing prompt",
         },
         { status: 400 }
@@ -184,6 +187,7 @@ export async function POST(req: NextRequest) {
 
     const config = await generateNeuralScript(prompt);
     const script = buildVoiceScript(prompt, config);
+    const subtitles = generateSubtitleSegments(script, 18);
 
     const [audioUrl, videoUrl] = await Promise.all([
       generateElevenLabsAudio(script),
@@ -195,6 +199,7 @@ export async function POST(req: NextRequest) {
       prompt,
       script,
       config,
+      subtitles,
       videoUrl,
       audioUrl,
     });
@@ -209,4 +214,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-  }
+      }
