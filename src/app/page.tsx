@@ -51,6 +51,17 @@ export default function NeuralRapturePage() {
     setActiveSubtitle(currentSubtitle?.text || "");
   };
 
+  const handleDownload = () => {
+    if (!videoResult) return;
+
+    const link = document.createElement("a");
+    link.href = videoResult;
+    link.download = `personavid-${Date.now()}.mp4`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
   const handleManifest = async () => {
     if (!input.trim() || isRendering) return;
 
@@ -93,7 +104,7 @@ export default function NeuralRapturePage() {
       }
 
       setSubtitles(Array.isArray(assets.subtitles) ? assets.subtitles : []);
-      setStatus("RENDERING_MANIFEST...");
+      setStatus("RENDERING_TIKTOK_MP4...");
 
       const blob = await renderManifest({
         videoUrl: assets.videoUrl,
@@ -104,7 +115,7 @@ export default function NeuralRapturePage() {
       previousObjectUrlRef.current = objectUrl;
 
       setVideoResult(objectUrl);
-      setStatus("MANIFEST_COMPLETED");
+      setStatus("MP4_READY");
     } catch (err: any) {
       console.error("SYSTEM_FAILURE:", err);
       setDebugMessage(err?.message || "Unknown error");
@@ -123,7 +134,7 @@ export default function NeuralRapturePage() {
       <div className="relative z-10 w-full max-w-2xl">
         <div className="flex justify-between items-end mb-4 px-2 gap-4">
           <span className="text-[10px] font-bold text-cyan-400 tracking-[0.5em] uppercase">
-            v32.0_Rapture
+            v32.1_Rapture
           </span>
 
           <span className="text-[10px] text-zinc-500 font-mono font-bold tracking-widest uppercase text-right">
@@ -176,7 +187,7 @@ export default function NeuralRapturePage() {
                     : "bg-white text-black hover:bg-cyan-400 active:scale-95"
                 }`}
             >
-              {isRendering ? "Synchronisation..." : "Créer la vidéo"}
+              {isRendering ? "Création du MP4..." : "Créer la vidéo"}
             </button>
           </div>
         </div>
@@ -201,6 +212,13 @@ export default function NeuralRapturePage() {
                 </div>
               )}
             </div>
+
+            <button
+              onClick={handleDownload}
+              className="mt-5 w-full rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-5 py-4 text-xs font-black uppercase tracking-[0.35em] text-cyan-200 transition hover:bg-cyan-400 hover:text-black active:scale-95"
+            >
+              Télécharger le MP4
+            </button>
           </div>
         )}
       </div>
@@ -212,4 +230,4 @@ export default function NeuralRapturePage() {
       </footer>
     </main>
   );
-    }
+      }
