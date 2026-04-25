@@ -61,6 +61,15 @@ async function safeDelete(ffmpeg: FFmpeg, file: string) {
   }
 }
 
+function toBlobPart(data: Awaited<ReturnType<FFmpeg["readFile"]>>): BlobPart {
+  if (typeof data === "string") {
+    return new TextEncoder().encode(data).buffer;
+  }
+
+  const bytes = data as Uint8Array;
+  return bytes.slice().buffer;
+}
+
 export async function renderManifest({
   videoUrl,
   audioUrl,
@@ -131,18 +140,16 @@ export async function renderManifest({
 
     const data = await ffmpeg.readFile(outputVideo);
 
-    return new Blob([data], {
+    return new Blob([toBlobPart(data)], {
       type: "video/mp4",
     });
   } catch (error: any) {
     console.error("VIDEO_CORE_RENDER_FAILED:", error);
 
-    throw new Error(
-      error?.message || "Failed to create final TikTok video"
-    );
+    throw new Error(error?.message || "Failed to create final TikTok video");
   } finally {
     await safeDelete(ffmpeg, inputVideo);
     await safeDelete(ffmpeg, inputAudio);
     await safeDelete(ffmpeg, outputVideo);
   }
-      }
+                    }
