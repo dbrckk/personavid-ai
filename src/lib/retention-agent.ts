@@ -1,67 +1,74 @@
-/**
- * RETENTION AGENT v31 - NEURAL RAPTURE
- * Analyse sémantique et orchestration des stimuli
- */
+export function getPredictiveHeatmap(text: string): number[] {
+  const clean = String(text || "").trim();
 
-export interface WordTiming {
-  word: string;
-  start: number;
-  end: number;
-  duration: number;
+  if (!clean) {
+    return Array.from({ length: 20 }, () => 12);
+  }
+
+  const words = clean.split(/\s+/).filter(Boolean);
+  const lower = clean.toLowerCase();
+
+  const strongWords = [
+    "secret",
+    "money",
+    "argent",
+    "danger",
+    "truth",
+    "vérité",
+    "viral",
+    "ai",
+    "ia",
+    "business",
+    "discipline",
+    "motivation",
+    "result",
+    "résultat",
+    "mistake",
+    "erreur",
+    "power",
+    "puissance",
+  ];
+
+  const emotionalWords = [
+    "peur",
+    "envie",
+    "rêve",
+    "douleur",
+    "succès",
+    "échec",
+    "liberté",
+    "riche",
+    "fort",
+    "faible",
+    "honte",
+    "fierté",
+  ];
+
+  let baseScore = 35;
+
+  if (words.length >= 8) baseScore += 10;
+  if (words.length >= 16) baseScore += 10;
+  if (words.length > 35) baseScore -= 8;
+
+  for (const word of strongWords) {
+    if (lower.includes(word)) baseScore += 4;
+  }
+
+  for (const word of emotionalWords) {
+    if (lower.includes(word)) baseScore += 3;
+  }
+
+  if (/[?!]/.test(clean)) baseScore += 8;
+  if (/\d/.test(clean)) baseScore += 6;
+
+  baseScore = Math.max(15, Math.min(92, baseScore));
+
+  return Array.from({ length: 20 }, (_, index) => {
+    const wave = Math.sin(index * 0.85) * 13;
+    const hookBoost = index < 4 ? 18 - index * 3 : 0;
+    const endingBoost = index > 15 ? (index - 15) * 3 : 0;
+    const value = baseScore + wave + hookBoost + endingBoost;
+
+    return Math.round(Math.max(8, Math.min(100, value)));
+  });
 }
-
-export const AGENT_PROMPT = `
-  Rewrite this content for maximum ego-provocation and retention.
-  - Use the "Forbidden Rule" technique.
-  - Insert [BOOM] markers for psychological impacts.
-  - Use short, punchy sentences (max 7 words).
-  - Tone: Authority, Mystery, Direct.
-`;
-
-/**
- * Analyse le script et injecte des triggers de montage 
- * là où l'attention risque de chuter.
- */
-export const calculateNeuroTriggers = (timings: WordTiming[]) => {
-  return timings.map(t => {
-    let effect = "NONE";
-    let filter = "NORMAL";
-
-    // Trigger : Phrase trop longue ou mot complexe
-    if (t.duration > 700) {
-      effect = "ZOOM_PUNCH_1.2";
-      filter = "CHROMATIC_ABERRATION";
-    }
-
-    // Trigger : Marqueur de choc détecté
-    if (t.word.includes("[BOOM]")) {
-      effect = "RGB_SPLIT_FLASH";
-      filter = "GLITCH_VIGNETTE";
-    }
-
-    return {
-      ...t,
-      action: effect,
-      visualFilter: filter
-    };
-  });
-};
-
-/**
- * Calcule le score de rétention prédictif pour l'UI
- */
-export const getPredictiveHeatmap = (script: string) => {
-  const words = script.split(' ');
-  return words.map((_, i) => {
-    // Simule une analyse de densité de mots/vitesse
-    return Math.sin(i * 0.5) * 50 + 50; 
-  });
-};
-
-/**
- * Formate les sous-titres pour l'animation élastique (ASS Format)
- */
-export const formatElasticSubtitles = (word: string, isStressed: boolean) => {
-  const scale = isStressed ? 140 : 100;
-  return `{\\fscx${scale}\\fscy${scale}\\b1}${word}{\\r}`;
-};
