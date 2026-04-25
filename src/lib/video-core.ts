@@ -123,4 +123,4 @@ export async function renderManifest({
     await safeDelete(ffmpeg, inputAudio);
     await safeDelete(ffmpeg, outputVideo);
   }
-      }
+}
