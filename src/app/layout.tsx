@@ -1,25 +1,21 @@
-/**
- * ROOT LAYOUT v31
- * Définit la structure HTML de base pour le déploiement Vercel
- */
-import type { Metadata } from 'next'
-import './globals.css' // Assure-toi que ce fichier existe ou crée un fichier vide
+import "./globals.css";
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: 'NEURAL RAPTURE v31',
-  description: 'Cognitive Narrative Engine by Drackk-20',
-}
+  title: "PersonaVid AI",
+  description: "Generate ultra realistic TikTok videos with AI",
+};
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <html lang="fr">
-      <body className="bg-black antialiased">
+      <body className="bg-[#010101] text-white antialiased">
         {children}
       </body>
     </html>
-  )
+  );
 }
