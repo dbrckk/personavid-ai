@@ -4,11 +4,20 @@ import React, { useEffect, useRef, useState } from "react";
 import { getPredictiveHeatmap } from "../lib/retention-agent";
 import { renderManifest } from "../lib/video-core";
 
+type SubtitleSegment = {
+  id: string;
+  text: string;
+  start: number;
+  end: number;
+};
+
 type RenderApiResponse = {
+  ok?: boolean;
   prompt?: string;
   script?: string;
   videoUrl?: string;
   audioUrl?: string;
+  subtitles?: SubtitleSegment[];
   error?: string;
 };
 
@@ -18,7 +27,10 @@ export default function NeuralRapturePage() {
   const [videoResult, setVideoResult] = useState<string | null>(null);
   const [status, setStatus] = useState("SYSTEM_READY");
   const [debugMessage, setDebugMessage] = useState<string | null>(null);
+  const [subtitles, setSubtitles] = useState<SubtitleSegment[]>([]);
+  const [activeSubtitle, setActiveSubtitle] = useState("");
 
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const previousObjectUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -29,11 +41,23 @@ export default function NeuralRapturePage() {
     };
   }, []);
 
+  const handleTimeUpdate = () => {
+    const currentTime = videoRef.current?.currentTime || 0;
+
+    const currentSubtitle = subtitles.find(
+      (segment) => currentTime >= segment.start && currentTime <= segment.end
+    );
+
+    setActiveSubtitle(currentSubtitle?.text || "");
+  };
+
   const handleManifest = async () => {
     if (!input.trim() || isRendering) return;
 
     setIsRendering(true);
     setDebugMessage(null);
+    setSubtitles([]);
+    setActiveSubtitle("");
     setStatus("ANALYZING_NEURAL_FLUX...");
 
     try {
@@ -52,13 +76,7 @@ export default function NeuralRapturePage() {
         body: JSON.stringify({ prompt: input.trim() }),
       });
 
-      let assets: RenderApiResponse;
-
-      try {
-        assets = await response.json();
-      } catch {
-        throw new Error("Invalid JSON response from /api/render");
-      }
+      const assets: RenderApiResponse = await response.json();
 
       if (!response.ok) {
         throw new Error(
@@ -66,14 +84,15 @@ export default function NeuralRapturePage() {
         );
       }
 
-      if (!assets?.videoUrl) {
+      if (!assets.videoUrl) {
         throw new Error("Missing videoUrl in render response");
       }
 
-      if (!assets?.audioUrl) {
+      if (!assets.audioUrl) {
         throw new Error("Missing audioUrl in render response");
       }
 
+      setSubtitles(Array.isArray(assets.subtitles) ? assets.subtitles : []);
       setStatus("RENDERING_MANIFEST...");
 
       const blob = await renderManifest({
@@ -96,13 +115,15 @@ export default function NeuralRapturePage() {
   };
 
   return (
-    <main className="relative min-h-screen flex flex-col items-center justify-center p-6 bg-[#010101] text-zinc-100">
+    <main className="relative min-h-screen flex flex-col items-center justify-center p-6 bg-[#010101] text-zinc-100 overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top,rgba(6,182,212,0.16),transparent_45%)]" />
+
       <div className="absolute top-0 w-full h-[2px] bg-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.5)]" />
 
-      <div className="w-full max-w-2xl">
+      <div className="relative z-10 w-full max-w-2xl">
         <div className="flex justify-between items-end mb-4 px-2 gap-4">
           <span className="text-[10px] font-bold text-cyan-400 tracking-[0.5em] uppercase">
-            v31.4_Rapture
+            v32.0_Rapture
           </span>
 
           <span className="text-[10px] text-zinc-500 font-mono font-bold tracking-widest uppercase text-right">
@@ -119,7 +140,7 @@ export default function NeuralRapturePage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               className="w-full h-48 bg-transparent border-none text-white text-xl font-light placeholder-zinc-700 focus:ring-0 focus:outline-none resize-none p-0 leading-relaxed"
-              placeholder="Injecter le script d'influence ici..."
+              placeholder="Injecter ton idée TikTok ici..."
             />
 
             <div className="flex gap-[1px] h-1.5 w-full bg-white/5 mt-6 rounded-full overflow-hidden">
@@ -155,30 +176,40 @@ export default function NeuralRapturePage() {
                     : "bg-white text-black hover:bg-cyan-400 active:scale-95"
                 }`}
             >
-              {isRendering ? "Synchronisation..." : "Lancer Manifestation"}
+              {isRendering ? "Synchronisation..." : "Créer la vidéo"}
             </button>
           </div>
         </div>
 
         {videoResult && (
           <div className="mt-8 animate-in zoom-in-95 duration-500">
-            <div className="p-1 bg-gradient-to-b from-cyan-500/20 to-transparent rounded-3xl">
+            <div className="relative mx-auto aspect-[9/16] max-h-[78vh] max-w-[430px] overflow-hidden rounded-[1.8rem] border border-white/10 bg-black shadow-2xl">
               <video
+                ref={videoRef}
                 src={videoResult}
                 controls
-                className="w-full rounded-[1.4rem] shadow-2xl"
+                className="h-full w-full object-cover"
                 playsInline
+                onTimeUpdate={handleTimeUpdate}
               />
+
+              {activeSubtitle && (
+                <div className="pointer-events-none absolute left-1/2 bottom-[13%] w-[88%] -translate-x-1/2 text-center">
+                  <p className="text-[clamp(24px,7vw,44px)] font-black uppercase leading-[0.95] tracking-[-0.04em] text-white drop-shadow-[0_4px_0_rgba(0,0,0,1)] [text-shadow:_0_3px_0_#000,_0_-3px_0_#000,_3px_0_0_#000,_-3px_0_0_#000,_0_0_18px_rgba(0,0,0,0.9)]">
+                    {activeSubtitle}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}
       </div>
 
-      <footer className="mt-12 opacity-30">
+      <footer className="relative z-10 mt-12 opacity-30">
         <p className="text-[9px] tracking-[1em] uppercase">
           User_Authorized: Drackk-20
         </p>
       </footer>
     </main>
   );
-  }
+    }
