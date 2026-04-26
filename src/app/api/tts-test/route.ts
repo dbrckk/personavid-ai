@@ -50,8 +50,8 @@ export async function POST(req: NextRequest) {
 
     const text =
       typeof body?.text === "string" && body.text.trim()
-        ? body.text.trim().slice(0, 300)
-        : "Stop scrolling... You need to hear this carefully.";
+        ? body.text.trim().slice(0, 1000)
+        : "Stop scrolling... this is the part most people ignore.";
 
     const response = await fetch(`${baseUrl}/generate`, {
       method: "POST",
@@ -64,6 +64,7 @@ export async function POST(req: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text();
+
       return NextResponse.json(
         {
           ok: false,
@@ -90,4 +91,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-        }
+}
