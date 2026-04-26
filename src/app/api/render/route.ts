@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateNeuralScript } from "@/lib/ai-engine";
+import { generateNeuralScript, ViralStyle } from "@/lib/ai-engine";
 import { generateSubtitleSegments } from "@/lib/subtitle-engine";
 
 type PexelsVideoFile = {
@@ -21,20 +21,30 @@ type PexelsVideo = {
   video_files: PexelsVideoFile[];
 };
 
+const allowedStyles: ViralStyle[] = [
+  "dominant",
+  "seductive",
+  "motivational",
+  "mysterious",
+  "luxury",
+];
+
 function cleanPrompt(prompt: unknown) {
   return String(prompt || "").trim().slice(0, 700);
 }
 
+function cleanStyle(style: unknown): ViralStyle {
+  const value = String(style || "").trim() as ViralStyle;
+  return allowedStyles.includes(value) ? value : "dominant";
+}
+
 function buildVoiceScript(prompt: string, config: any) {
   const rewritten = String(config?.rewrittenPrompt || "").trim();
-  const hook = String(config?.hook || "Stop scrolling...").trim();
 
-  if (rewritten) {
-    return rewritten;
-  }
+  if (rewritten) return rewritten.slice(0, 1000);
 
   return [
-    hook,
+    "Stop scrolling...",
     "",
     "You think you're doing enough?",
     "",
@@ -44,41 +54,39 @@ function buildVoiceScript(prompt: string, config: any) {
     "",
     "But here's the truth...",
     "",
-    "You're missing the part that actually matters.",
-    "",
-    "And once you understand it...",
-    "",
-    "everything changes.",
+    "The part you ignore is the part that changes everything.",
     "",
     "Save this.",
   ].join("\n");
 }
 
-function getPexelsSearchQuery(prompt: string, config?: any) {
+function getPexelsSearchQuery(prompt: string, config?: any, style?: ViralStyle) {
   const angle = String(config?.angle || "").toLowerCase();
-  const text = `${prompt} ${angle}`.toLowerCase();
+  const text = `${prompt} ${angle} ${style || ""}`.toLowerCase();
 
   if (text.includes("money") || text.includes("business") || text.includes("argent")) {
-    return "business success";
+    return "business success vertical";
   }
 
   if (text.includes("fitness") || text.includes("sport") || text.includes("muscle")) {
-    return "fitness motivation";
+    return "fitness motivation vertical";
   }
 
   if (text.includes("ai") || text.includes("ia") || text.includes("tech")) {
-    return "technology futuristic";
+    return "technology futuristic vertical";
   }
 
   if (text.includes("motivation") || text.includes("discipline")) {
-    return "discipline motivation";
+    return "discipline motivation vertical";
   }
 
-  if (text.includes("love") || text.includes("relationship")) {
-    return "luxury lifestyle woman";
-  }
+  if (style === "luxury") return "luxury lifestyle vertical";
+  if (style === "mysterious") return "dark cinematic aesthetic";
+  if (style === "seductive") return "confident woman cinematic";
+  if (style === "dominant") return "powerful woman city";
+  if (style === "motivational") return "success discipline motivation";
 
-  return "cinematic lifestyle";
+  return "cinematic lifestyle vertical";
 }
 
 function pickBestVerticalVideo(videos: PexelsVideo[]) {
@@ -110,7 +118,7 @@ function pickBestVerticalVideo(videos: PexelsVideo[]) {
   return sorted[0]?.link || null;
 }
 
-async function searchPexelsVideo(prompt: string, config?: any) {
+async function searchPexelsVideo(prompt: string, config?: any, style?: ViralStyle) {
   const apiKey = process.env.PEXELS_API_KEY || "";
 
   if (!apiKey) {
@@ -119,7 +127,7 @@ async function searchPexelsVideo(prompt: string, config?: any) {
 
   const url = new URL("https://api.pexels.com/videos/search");
 
-  url.searchParams.set("query", getPexelsSearchQuery(prompt, config));
+  url.searchParams.set("query", getPexelsSearchQuery(prompt, config, style));
   url.searchParams.set("orientation", "portrait");
   url.searchParams.set("per_page", "12");
 
@@ -203,7 +211,9 @@ async function generateColabAudio(script: string) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+
     const prompt = cleanPrompt(body?.prompt);
+    const style = cleanStyle(body?.style);
 
     if (!prompt) {
       return NextResponse.json(
@@ -215,19 +225,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const config = await generateNeuralScript(prompt);
+    const config = await generateNeuralScript(prompt, style);
     const script = buildVoiceScript(prompt, config);
-    const subtitles = generateSubtitleSegments(script, 18);
+    const subtitles = generateSubtitleSegments(script, 24);
 
     const [audioUrl, videoUrl] = await Promise.all([
       generateColabAudio(script),
-      searchPexelsVideo(prompt, config),
+      searchPexelsVideo(prompt, config, style),
     ]);
 
     return NextResponse.json({
       ok: true,
       provider: "F5-TTS-Colab",
       prompt,
+      style,
       script,
       config,
       subtitles,
@@ -251,4 +262,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-    }
+}
