@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateNeuralScript, ViralStyle } from "@/lib/ai-engine";
-import { generateSubtitleSegments } from "@/lib/subtitle-engine";
+import {
+  estimateDurationFromScript,
+  generateSubtitleSegments,
+} from "@/lib/subtitle-engine";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 type PexelsVideoFile = {
   id: number;
@@ -30,11 +36,11 @@ const allowedStyles: ViralStyle[] = [
 ];
 
 function cleanPrompt(prompt: unknown) {
-  return String(prompt || "").trim().slice(0, 700);
+  return String(prompt || "").trim().slice(0, 900);
 }
 
 function cleanScript(script: unknown) {
-  return String(script || "").trim().slice(0, 1000);
+  return String(script || "").trim().slice(0, 1700);
 }
 
 function cleanStyle(style: unknown): ViralStyle {
@@ -53,6 +59,7 @@ async function checkColabOnline(baseUrl: string) {
       cache: "no-store",
       headers: {
         "ngrok-skip-browser-warning": "true",
+        "User-Agent": "PersonaVidAI/1.0",
       },
     });
 
@@ -78,22 +85,22 @@ function buildVoiceScript(prompt: string, config: any, userScript?: string) {
 
   const rewritten = String(config?.rewrittenPrompt || "").trim();
 
-  if (rewritten) return rewritten.slice(0, 1000);
+  if (rewritten) return rewritten.slice(0, 1700);
 
   return [
     "Stop scrolling...",
     "",
-    "You think you're doing enough?",
+    "Most people think they need more motivation.",
     "",
-    "You're not.",
+    "They don't.",
     "",
     prompt,
     "",
-    "But here's the truth...",
+    "They need a system that makes the right action impossible to avoid.",
     "",
     "The part you ignore is the part that changes everything.",
     "",
-    "Save this.",
+    "Save this before you forget it.",
   ].join("\n");
 }
 
@@ -198,9 +205,10 @@ async function renderFinalInColab(script: string, videoUrl: string) {
     headers: {
       "Content-Type": "application/json",
       "ngrok-skip-browser-warning": "true",
+      "User-Agent": "PersonaVidAI/1.0",
     },
     body: JSON.stringify({
-      text: script.slice(0, 1000),
+      text: script.slice(0, 1700),
       video_url: videoUrl,
     }),
   });
@@ -246,7 +254,9 @@ export async function POST(req: NextRequest) {
         };
 
     const script = buildVoiceScript(prompt, config, manualScript);
-    const subtitles = generateSubtitleSegments(script, 24);
+    const estimatedDuration = estimateDurationFromScript(script);
+    const subtitles = generateSubtitleSegments(script, estimatedDuration);
+
     const videoUrl = await searchPexelsVideo(prompt || script, config, style);
     const finalVideoUrl = await renderFinalInColab(script, videoUrl);
 
@@ -256,6 +266,7 @@ export async function POST(req: NextRequest) {
       prompt,
       style,
       script,
+      estimatedDuration,
       config,
       subtitles,
       videoUrl,
@@ -272,10 +283,10 @@ export async function POST(req: NextRequest) {
         error: message,
         help:
           message === "COLAB_OFFLINE_OR_VOICE_NOT_READY"
-            ? "Lance le notebook Colab, upload l'audio de référence, attends que /health affiche voice_ready=true, ref_text_ready=true et render_ready=true."
+            ? "Colab est offline ou la voix n'est pas prête. Lance le notebook, upload l'audio, puis vérifie /api/tts-health."
             : undefined,
       },
       { status: 500 }
     );
   }
-      }
+}
