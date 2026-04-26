@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateNeuralScript, ViralStyle } from "@/lib/ai-engine";
-import { generateSubtitleSegments } from "@/lib/subtitle-engine";
+import {
+  estimateDurationFromScript,
+  generateSubtitleSegments,
+} from "@/lib/subtitle-engine";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const allowedStyles: ViralStyle[] = [
   "dominant",
@@ -11,7 +17,7 @@ const allowedStyles: ViralStyle[] = [
 ];
 
 function cleanPrompt(prompt: unknown) {
-  return String(prompt || "").trim().slice(0, 700);
+  return String(prompt || "").trim().slice(0, 900);
 }
 
 function cleanStyle(style: unknown): ViralStyle {
@@ -37,28 +43,17 @@ export async function POST(req: NextRequest) {
     }
 
     const config = await generateNeuralScript(prompt, style);
+    const script = String(config.rewrittenPrompt || "").trim();
 
-    const script =
-      String(config?.rewrittenPrompt || "").trim() ||
-      [
-        config?.hook || "Stop scrolling...",
-        "",
-        prompt,
-        "",
-        "But here's the truth...",
-        "",
-        "The part you ignore is the part that changes everything.",
-        "",
-        "Save this.",
-      ].join("\n");
-
-    const subtitles = generateSubtitleSegments(script, 24);
+    const estimatedDuration = estimateDurationFromScript(script);
+    const subtitles = generateSubtitleSegments(script, estimatedDuration);
 
     return NextResponse.json({
       ok: true,
       prompt,
       style,
       script,
+      estimatedDuration,
       config,
       subtitles,
     });
@@ -71,4 +66,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-  }
+}
