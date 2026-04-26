@@ -7,41 +7,18 @@ export type NeuralScriptConfig = {
   hook: string;
   angle: string;
   mood: string;
+  rewrittenPrompt: string;
 };
 
 function fallbackConfig(prompt: string): NeuralScriptConfig {
-  const clean = prompt.toLowerCase();
-
-  let angle = "cinematic_lifestyle";
-  let mood = "confident";
-
-  if (clean.includes("money") || clean.includes("argent") || clean.includes("business")) {
-    angle = "money_growth";
-    mood = "ambitious";
-  }
-
-  if (clean.includes("fitness") || clean.includes("sport") || clean.includes("muscle")) {
-    angle = "discipline_body";
-    mood = "intense";
-  }
-
-  if (clean.includes("ai") || clean.includes("ia") || clean.includes("tech")) {
-    angle = "future_technology";
-    mood = "futuristic";
-  }
-
-  if (clean.includes("motivation") || clean.includes("discipline")) {
-    angle = "self_improvement";
-    mood = "powerful";
-  }
-
   return {
-    rythme: 82,
+    rythme: 86,
     intensite: "High",
-    ruptures: [4, 9, 14],
-    hook: "Stop scrolling.",
-    angle,
-    mood,
+    ruptures: [3, 7, 12],
+    hook: "Stop scrolling...",
+    angle: "self_improvement",
+    mood: "confident_seductive",
+    rewrittenPrompt: prompt,
   };
 }
 
@@ -79,7 +56,10 @@ function normalizeConfig(data: any, prompt: string): NeuralScriptConfig {
           .slice(0, 5)
       : fallback.ruptures,
 
-    hook: typeof data?.hook === "string" ? data.hook.slice(0, 120) : fallback.hook,
+    hook:
+      typeof data?.hook === "string"
+        ? data.hook.slice(0, 120)
+        : fallback.hook,
 
     angle:
       typeof data?.angle === "string"
@@ -90,10 +70,17 @@ function normalizeConfig(data: any, prompt: string): NeuralScriptConfig {
       typeof data?.mood === "string"
         ? data.mood.slice(0, 80)
         : fallback.mood,
+
+    rewrittenPrompt:
+      typeof data?.rewrittenPrompt === "string"
+        ? data.rewrittenPrompt.slice(0, 900)
+        : fallback.rewrittenPrompt,
   };
 }
 
-export async function generateNeuralScript(prompt: string): Promise<NeuralScriptConfig> {
+export async function generateNeuralScript(
+  prompt: string
+): Promise<NeuralScriptConfig> {
   const cleanPrompt = String(prompt || "").trim().slice(0, 800);
 
   if (!cleanPrompt) {
@@ -114,21 +101,36 @@ export async function generateNeuralScript(prompt: string): Promise<NeuralScript
     });
 
     const result = await model.generateContent(`
-Tu es un expert en vidéos TikTok courtes, rétention, rythme et storytelling.
+You are an expert TikTok script strategist.
 
-Réponds UNIQUEMENT avec un objet JSON valide.
+Goal:
+Transform the user's raw idea into a short, intense, English USA TikTok narration.
 
-Format exact :
+Voice style:
+young woman, confident, seductive, slightly dominant, direct, not cringe.
+
+Rules:
+- Reply only with valid JSON.
+- No markdown.
+- No explanation.
+- The rewrittenPrompt must be in English.
+- Short sentences.
+- Strong hook.
+- 18 to 30 seconds max.
+- Avoid unsafe, hateful, sexual explicit or illegal content.
+
+Exact JSON format:
 {
-  "rythme": 85,
+  "rythme": 86,
   "intensite": "High",
-  "ruptures": [4, 9, 14],
-  "hook": "Stop scrolling.",
+  "ruptures": [3, 7, 12],
+  "hook": "Stop scrolling...",
   "angle": "self_improvement",
-  "mood": "cinematic"
+  "mood": "confident_seductive",
+  "rewrittenPrompt": "Your final TikTok narration text here."
 }
 
-Prompt utilisateur :
+User idea:
 ${cleanPrompt}
 `);
 
@@ -140,4 +142,4 @@ ${cleanPrompt}
     console.error("NEURAL_ENGINE_FALLBACK:", error);
     return fallbackConfig(cleanPrompt);
   }
-  }
+      }
