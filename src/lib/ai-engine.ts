@@ -1,5 +1,12 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+export type ViralStyle =
+  | "dominant"
+  | "seductive"
+  | "motivational"
+  | "mysterious"
+  | "luxury";
+
 export type NeuralScriptConfig = {
   rythme: number;
   intensite: "Low" | "Medium" | "High" | "Ultra";
@@ -10,15 +17,37 @@ export type NeuralScriptConfig = {
   rewrittenPrompt: string;
 };
 
-function fallbackConfig(prompt: string): NeuralScriptConfig {
+function fallbackConfig(prompt: string, style: ViralStyle): NeuralScriptConfig {
+  const styleHook: Record<ViralStyle, string> = {
+    dominant: "Stop scrolling...",
+    seductive: "Listen closely...",
+    motivational: "You need to hear this...",
+    mysterious: "Nobody talks about this...",
+    luxury: "Here is what separates you from them...",
+  };
+
   return {
-    rythme: 86,
+    rythme: 88,
     intensite: "High",
     ruptures: [3, 7, 12],
-    hook: "Stop scrolling...",
-    angle: "self_improvement",
-    mood: "confident_seductive",
-    rewrittenPrompt: prompt,
+    hook: styleHook[style],
+    angle: style,
+    mood: `confident_${style}`,
+    rewrittenPrompt: [
+      styleHook[style],
+      "",
+      "You think you're doing enough?",
+      "",
+      "You're not.",
+      "",
+      prompt,
+      "",
+      "But here's the truth...",
+      "",
+      "The part you ignore is the part that changes everything.",
+      "",
+      "Save this.",
+    ].join("\n"),
   };
 }
 
@@ -33,8 +62,12 @@ function extractJson(text: string) {
   return JSON.parse(text.slice(start, end + 1));
 }
 
-function normalizeConfig(data: any, prompt: string): NeuralScriptConfig {
-  const fallback = fallbackConfig(prompt);
+function normalizeConfig(
+  data: any,
+  prompt: string,
+  style: ViralStyle
+): NeuralScriptConfig {
+  const fallback = fallbackConfig(prompt, style);
 
   return {
     rythme:
@@ -73,24 +106,25 @@ function normalizeConfig(data: any, prompt: string): NeuralScriptConfig {
 
     rewrittenPrompt:
       typeof data?.rewrittenPrompt === "string"
-        ? data.rewrittenPrompt.slice(0, 900)
+        ? data.rewrittenPrompt.slice(0, 1000)
         : fallback.rewrittenPrompt,
   };
 }
 
 export async function generateNeuralScript(
-  prompt: string
+  prompt: string,
+  style: ViralStyle = "dominant"
 ): Promise<NeuralScriptConfig> {
   const cleanPrompt = String(prompt || "").trim().slice(0, 800);
 
   if (!cleanPrompt) {
-    return fallbackConfig("");
+    return fallbackConfig("", style);
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
-    return fallbackConfig(cleanPrompt);
+    return fallbackConfig(cleanPrompt, style);
   }
 
   try {
@@ -103,31 +137,36 @@ export async function generateNeuralScript(
     const result = await model.generateContent(`
 You are an expert TikTok script strategist.
 
-Goal:
-Transform the user's raw idea into a short, intense, English USA TikTok narration.
+Transform the user's raw idea into a short English USA TikTok narration.
 
-Voice style:
-young woman, confident, seductive, slightly dominant, direct, not cringe.
+Voice identity:
+young adult woman, realistic, confident, slightly seductive, slightly dominant.
+
+Selected style:
+${style}
 
 Rules:
 - Reply only with valid JSON.
 - No markdown.
 - No explanation.
-- The rewrittenPrompt must be in English.
-- Short sentences.
-- Strong hook.
 - 18 to 30 seconds max.
-- Avoid unsafe, hateful, sexual explicit or illegal content.
+- Short lines.
+- Natural pauses.
+- Strong first 2 seconds.
+- No cringe.
+- No explicit sexual content.
+- No illegal instructions.
+- The final narration must be in English.
 
-Exact JSON format:
+Exact JSON:
 {
-  "rythme": 86,
+  "rythme": 90,
   "intensite": "High",
   "ruptures": [3, 7, 12],
   "hook": "Stop scrolling...",
-  "angle": "self_improvement",
-  "mood": "confident_seductive",
-  "rewrittenPrompt": "Your final TikTok narration text here."
+  "angle": "${style}",
+  "mood": "confident_${style}",
+  "rewrittenPrompt": "Final narration here."
 }
 
 User idea:
@@ -137,9 +176,9 @@ ${cleanPrompt}
     const text = result.response.text();
     const parsed = extractJson(text);
 
-    return normalizeConfig(parsed, cleanPrompt);
+    return normalizeConfig(parsed, cleanPrompt, style);
   } catch (error) {
     console.error("NEURAL_ENGINE_FALLBACK:", error);
-    return fallbackConfig(cleanPrompt);
+    return fallbackConfig(cleanPrompt, style);
   }
-      }
+  }
