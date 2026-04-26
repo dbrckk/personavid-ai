@@ -33,15 +33,27 @@ function cleanPrompt(prompt: unknown) {
   return String(prompt || "").trim().slice(0, 700);
 }
 
+function cleanScript(script: unknown) {
+  return String(script || "").trim().slice(0, 1000);
+}
+
 function cleanStyle(style: unknown): ViralStyle {
   const value = String(style || "").trim() as ViralStyle;
   return allowedStyles.includes(value) ? value : "dominant";
 }
 
-function buildVoiceScript(prompt: string, config: any) {
+function buildVoiceScript(prompt: string, config: any, userScript?: string) {
+  const manualScript = cleanScript(userScript);
+
+  if (manualScript) {
+    return manualScript;
+  }
+
   const rewritten = String(config?.rewrittenPrompt || "").trim();
 
-  if (rewritten) return rewritten.slice(0, 1000);
+  if (rewritten) {
+    return rewritten.slice(0, 1000);
+  }
 
   return [
     "Stop scrolling...",
@@ -108,7 +120,6 @@ function pickBestVerticalVideo(videos: PexelsVideo[]) {
   const sorted = candidates.sort((a, b) => {
     const aRatio = a.height / Math.max(a.width, 1);
     const bRatio = b.height / Math.max(b.width, 1);
-
     const aSize = a.width * a.height;
     const bSize = b.width * b.height;
 
@@ -214,24 +225,32 @@ export async function POST(req: NextRequest) {
 
     const prompt = cleanPrompt(body?.prompt);
     const style = cleanStyle(body?.style);
+    const manualScript = cleanScript(body?.script);
 
-    if (!prompt) {
+    if (!prompt && !manualScript) {
       return NextResponse.json(
         {
           ok: false,
-          error: "Missing prompt",
+          error: "Missing prompt or script",
         },
         { status: 400 }
       );
     }
 
-    const config = await generateNeuralScript(prompt, style);
-    const script = buildVoiceScript(prompt, config);
+    const config = prompt
+      ? await generateNeuralScript(prompt, style)
+      : {
+          angle: style,
+          mood: `confident_${style}`,
+          rewrittenPrompt: manualScript,
+        };
+
+    const script = buildVoiceScript(prompt, config, manualScript);
     const subtitles = generateSubtitleSegments(script, 24);
 
     const [audioUrl, videoUrl] = await Promise.all([
       generateColabAudio(script),
-      searchPexelsVideo(prompt, config, style),
+      searchPexelsVideo(prompt || script, config, style),
     ]);
 
     return NextResponse.json({
@@ -262,4 +281,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+  }
