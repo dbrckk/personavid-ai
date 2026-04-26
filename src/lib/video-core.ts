@@ -57,7 +57,7 @@ async function safeDelete(ffmpeg: FFmpeg, file: string) {
   try {
     await ffmpeg.deleteFile(file);
   } catch {
-    // ignore cleanup errors
+    // ignore
   }
 }
 
@@ -85,9 +85,8 @@ export async function renderManifest({
   const ffmpeg = await getFFmpeg();
 
   const jobId = buildSafeId();
-
   const inputVideo = `input-video-${jobId}.mp4`;
-  const inputAudio = `input-audio-${jobId}.mp3`;
+  const inputAudio = `input-audio-${jobId}.wav`;
   const outputVideo = `final-tiktok-${jobId}.mp4`;
 
   try {
@@ -108,7 +107,7 @@ export async function renderManifest({
       inputAudio,
 
       "-vf",
-      "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920",
+      "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30",
 
       "-map",
       "0:v:0",
@@ -120,14 +119,14 @@ export async function renderManifest({
       "-preset",
       "veryfast",
       "-crf",
-      "23",
+      "24",
       "-pix_fmt",
       "yuv420p",
 
       "-c:a",
       "aac",
       "-b:a",
-      "192k",
+      "160k",
       "-ar",
       "44100",
 
@@ -146,10 +145,13 @@ export async function renderManifest({
   } catch (error: any) {
     console.error("VIDEO_CORE_RENDER_FAILED:", error);
 
-    throw new Error(error?.message || "Failed to create final TikTok video");
+    throw new Error(
+      error?.message ||
+        "Le rendu vidéo a échoué. Essaie sur PC/Chrome si tu es sur mobile."
+    );
   } finally {
     await safeDelete(ffmpeg, inputVideo);
     await safeDelete(ffmpeg, inputAudio);
     await safeDelete(ffmpeg, outputVideo);
   }
-                    }
+    }
