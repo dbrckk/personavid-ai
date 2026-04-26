@@ -18,36 +18,46 @@ export type NeuralScriptConfig = {
 };
 
 function fallbackConfig(prompt: string, style: ViralStyle): NeuralScriptConfig {
-  const styleHook: Record<ViralStyle, string> = {
+  const hooks: Record<ViralStyle, string> = {
     dominant: "Stop scrolling...",
     seductive: "Listen closely...",
     motivational: "You need to hear this...",
     mysterious: "Nobody talks about this...",
-    luxury: "Here is what separates you from them...",
+    luxury: "Here is what separates you from everyone else...",
   };
+
+  const script = [
+    hooks[style],
+    "",
+    "Most people think they need more motivation.",
+    "",
+    "They don't.",
+    "",
+    "They need a system that makes the right action impossible to avoid.",
+    "",
+    prompt,
+    "",
+    "Here is the truth.",
+    "",
+    "If your environment keeps rewarding distraction, your discipline will always feel weak.",
+    "",
+    "So stop trying to force yourself to become someone else.",
+    "",
+    "Design your day so the better version of you has fewer excuses.",
+    "",
+    "That is how change starts to feel automatic.",
+    "",
+    "Save this, because you will need it later.",
+  ].join("\n");
 
   return {
     rythme: 88,
     intensite: "High",
-    ruptures: [3, 7, 12],
-    hook: styleHook[style],
+    ruptures: [3, 8, 15, 23, 31],
+    hook: hooks[style],
     angle: style,
     mood: `confident_${style}`,
-    rewrittenPrompt: [
-      styleHook[style],
-      "",
-      "You think you're doing enough?",
-      "",
-      "You're not.",
-      "",
-      prompt,
-      "",
-      "But here's the truth...",
-      "",
-      "The part you ignore is the part that changes everything.",
-      "",
-      "Save this.",
-    ].join("\n"),
+    rewrittenPrompt: script,
   };
 }
 
@@ -84,14 +94,12 @@ function normalizeConfig(
         : fallback.intensite,
 
     ruptures: Array.isArray(data?.ruptures)
-      ? data.ruptures
-          .filter((n: unknown) => typeof n === "number")
-          .slice(0, 5)
+      ? data.ruptures.filter((n: unknown) => typeof n === "number").slice(0, 8)
       : fallback.ruptures,
 
     hook:
       typeof data?.hook === "string"
-        ? data.hook.slice(0, 120)
+        ? data.hook.slice(0, 140)
         : fallback.hook,
 
     angle:
@@ -105,8 +113,9 @@ function normalizeConfig(
         : fallback.mood,
 
     rewrittenPrompt:
-      typeof data?.rewrittenPrompt === "string"
-        ? data.rewrittenPrompt.slice(0, 1000)
+      typeof data?.rewrittenPrompt === "string" &&
+      data.rewrittenPrompt.trim().length > 180
+        ? data.rewrittenPrompt.slice(0, 1700)
         : fallback.rewrittenPrompt,
   };
 }
@@ -115,7 +124,7 @@ export async function generateNeuralScript(
   prompt: string,
   style: ViralStyle = "dominant"
 ): Promise<NeuralScriptConfig> {
-  const cleanPrompt = String(prompt || "").trim().slice(0, 800);
+  const cleanPrompt = String(prompt || "").trim().slice(0, 900);
 
   if (!cleanPrompt) {
     return fallbackConfig("", style);
@@ -135,9 +144,9 @@ export async function generateNeuralScript(
     });
 
     const result = await model.generateContent(`
-You are an expert TikTok script strategist.
+You are an elite TikTok script writer.
 
-Transform the user's raw idea into a short English USA TikTok narration.
+Transform the user's idea into a full English USA TikTok narration.
 
 Voice identity:
 young adult woman, realistic, confident, slightly seductive, slightly dominant.
@@ -145,28 +154,34 @@ young adult woman, realistic, confident, slightly seductive, slightly dominant.
 Selected style:
 ${style}
 
+Duration:
+25 to 40 seconds.
+
+Length:
+90 to 135 words.
+
 Rules:
 - Reply only with valid JSON.
 - No markdown.
 - No explanation.
-- 18 to 30 seconds max.
-- Short lines.
-- Natural pauses.
+- Natural spoken English.
+- Short punchy lines.
+- Use line breaks for pauses.
 - Strong first 2 seconds.
-- No cringe.
+- Keep it intense but not cringe.
 - No explicit sexual content.
 - No illegal instructions.
-- The final narration must be in English.
+- The narration must feel like a real TikTok voiceover.
 
 Exact JSON:
 {
   "rythme": 90,
   "intensite": "High",
-  "ruptures": [3, 7, 12],
+  "ruptures": [3, 8, 15, 23, 31],
   "hook": "Stop scrolling...",
   "angle": "${style}",
   "mood": "confident_${style}",
-  "rewrittenPrompt": "Final narration here."
+  "rewrittenPrompt": "Final 25 to 40 second narration here."
 }
 
 User idea:
@@ -181,4 +196,4 @@ ${cleanPrompt}
     console.error("NEURAL_ENGINE_FALLBACK:", error);
     return fallbackConfig(cleanPrompt, style);
   }
-  }
+}
