@@ -42,18 +42,43 @@ function cleanStyle(style: unknown): ViralStyle {
   return allowedStyles.includes(value) ? value : "dominant";
 }
 
+function getColabBaseUrl() {
+  return String(process.env.COLAB_TTS_URL || "").replace(/\/$/, "");
+}
+
+async function checkColabOnline(baseUrl: string) {
+  try {
+    const response = await fetch(`${baseUrl}/health`, {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        "ngrok-skip-browser-warning": "true",
+      },
+    });
+
+    if (!response.ok) return false;
+
+    const data = await response.json();
+
+    return Boolean(
+      data?.ok &&
+        data?.voice_ready &&
+        data?.ref_text_ready &&
+        data?.render_ready
+    );
+  } catch {
+    return false;
+  }
+}
+
 function buildVoiceScript(prompt: string, config: any, userScript?: string) {
   const manualScript = cleanScript(userScript);
 
-  if (manualScript) {
-    return manualScript;
-  }
+  if (manualScript) return manualScript;
 
   const rewritten = String(config?.rewrittenPrompt || "").trim();
 
-  if (rewritten) {
-    return rewritten.slice(0, 1000);
-  }
+  if (rewritten) return rewritten.slice(0, 1000);
 
   return [
     "Stop scrolling...",
@@ -132,9 +157,7 @@ function pickBestVerticalVideo(videos: PexelsVideo[]) {
 async function searchPexelsVideo(prompt: string, config?: any, style?: ViralStyle) {
   const apiKey = process.env.PEXELS_API_KEY || "";
 
-  if (!apiKey) {
-    return "/demo.mp4";
-  }
+  if (!apiKey) return "/demo.mp4";
 
   const url = new URL("https://api.pexels.com/videos/search");
 
@@ -149,9 +172,7 @@ async function searchPexelsVideo(prompt: string, config?: any, style?: ViralStyl
     cache: "no-store",
   });
 
-  if (!response.ok) {
-    return "/demo.mp4";
-  }
+  if (!response.ok) return "/demo.mp4";
 
   const data = await response.json();
   const videos = Array.isArray(data?.videos) ? data.videos : [];
@@ -159,32 +180,7 @@ async function searchPexelsVideo(prompt: string, config?: any, style?: ViralStyl
   return pickBestVerticalVideo(videos) || "/demo.mp4";
 }
 
-function getColabBaseUrl() {
-  const raw = process.env.COLAB_TTS_URL || "";
-  return raw.replace(/\/$/, "");
-}
-
-async function checkColabOnline(baseUrl: string) {
-  try {
-    const response = await fetch(`${baseUrl}/health`, {
-      method: "GET",
-      cache: "no-store",
-      headers: {
-        "ngrok-skip-browser-warning": "true",
-      },
-    });
-
-    if (!response.ok) return false;
-
-    const data = await response.json();
-
-    return Boolean(data?.ok && data?.voice_ready && data?.ref_text_ready);
-  } catch {
-    return false;
-  }
-}
-
-async function generateColabAudio(script: string) {
+async function renderFinalInColab(script: string, videoUrl: string) {
   const baseUrl = getColabBaseUrl();
 
   if (!baseUrl) {
@@ -197,7 +193,7 @@ async function generateColabAudio(script: string) {
     throw new Error("COLAB_OFFLINE_OR_VOICE_NOT_READY");
   }
 
-  const response = await fetch(`${baseUrl}/generate`, {
+  const response = await fetch(`${baseUrl}/render-final`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -205,18 +201,22 @@ async function generateColabAudio(script: string) {
     },
     body: JSON.stringify({
       text: script.slice(0, 1000),
+      video_url: videoUrl,
     }),
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`COLAB_TTS_FAILED: ${response.status} ${errorText}`);
+    const txt = await response.text();
+    throw new Error(`COLAB_RENDER_FAILED: ${response.status} ${txt}`);
   }
 
-  const audioBuffer = await response.arrayBuffer();
-  const base64 = Buffer.from(audioBuffer).toString("base64");
+  const data = await response.json();
 
-  return `data:audio/wav;base64,${base64}`;
+  if (!data?.ok || !data?.job_id) {
+    throw new Error("COLAB_RENDER_FAILED: missing job_id");
+  }
+
+  return `/api/video/${data.job_id}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -247,22 +247,19 @@ export async function POST(req: NextRequest) {
 
     const script = buildVoiceScript(prompt, config, manualScript);
     const subtitles = generateSubtitleSegments(script, 24);
-
-    const [audioUrl, videoUrl] = await Promise.all([
-      generateColabAudio(script),
-      searchPexelsVideo(prompt || script, config, style),
-    ]);
+    const videoUrl = await searchPexelsVideo(prompt || script, config, style);
+    const finalVideoUrl = await renderFinalInColab(script, videoUrl);
 
     return NextResponse.json({
       ok: true,
-      provider: "F5-TTS-Colab",
+      provider: "F5-TTS-Colab-FullRender",
       prompt,
       style,
       script,
       config,
       subtitles,
       videoUrl,
-      audioUrl,
+      finalVideoUrl,
     });
   } catch (error: any) {
     console.error("RENDER_API_CRASH:", error);
@@ -275,10 +272,10 @@ export async function POST(req: NextRequest) {
         error: message,
         help:
           message === "COLAB_OFFLINE_OR_VOICE_NOT_READY"
-            ? "Lance le notebook Colab, upload l'audio de référence, attends que /health affiche voice_ready=true et ref_text_ready=true."
+            ? "Lance le notebook Colab, upload l'audio de référence, attends que /health affiche voice_ready=true, ref_text_ready=true et render_ready=true."
             : undefined,
       },
       { status: 500 }
     );
   }
-  }
+      }
