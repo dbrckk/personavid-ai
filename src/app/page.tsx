@@ -31,6 +31,15 @@ type RenderApiResponse = {
   help?: string;
 };
 
+type ScriptPreviewResponse = {
+  ok?: boolean;
+  prompt?: string;
+  style?: ViralStyle;
+  script?: string;
+  subtitles?: SubtitleSegment[];
+  error?: string;
+};
+
 type TtsHealth = {
   ok: boolean;
   status: string;
@@ -60,6 +69,7 @@ export default function NeuralRapturePage() {
 
   const [isRendering, setIsRendering] = useState(false);
   const [isTestingVoice, setIsTestingVoice] = useState(false);
+  const [isGeneratingScript, setIsGeneratingScript] = useState(false);
 
   const [videoResult, setVideoResult] = useState<string | null>(null);
   const [testAudioUrl, setTestAudioUrl] = useState<string | null>(null);
@@ -114,6 +124,11 @@ export default function NeuralRapturePage() {
     };
   }, []);
 
+  const resetErrors = () => {
+    setDebugMessage(null);
+    setHelpMessage(null);
+  };
+
   const handleTimeUpdate = () => {
     const currentTime = videoRef.current?.currentTime || 0;
 
@@ -135,25 +150,63 @@ export default function NeuralRapturePage() {
     link.remove();
   };
 
+  const handleScriptPreview = async () => {
+    if (!input.trim() || isGeneratingScript) return;
+
+    setIsGeneratingScript(true);
+    resetErrors();
+    setStatus("GENERATING_SCRIPT_PREVIEW...");
+
+    try {
+      const response = await fetch("/api/script-preview", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          prompt: input.trim(),
+          style,
+        }),
+      });
+
+      const data: ScriptPreviewResponse = await response.json();
+
+      if (!response.ok || !data.ok) {
+        throw new Error(data?.error || "SCRIPT_PREVIEW_FAILED");
+      }
+
+      setGeneratedScript(data.script || "");
+      setSubtitles(Array.isArray(data.subtitles) ? data.subtitles : []);
+      setStatus("SCRIPT_READY");
+    } catch (error: any) {
+      setDebugMessage(error?.message || "SCRIPT_PREVIEW_FAILED");
+      setStatus("ERROR_IN_SCRIPT_ENGINE");
+    } finally {
+      setIsGeneratingScript(false);
+    }
+  };
+
   const handleVoiceTest = async () => {
     if (isTestingVoice) return;
 
     setIsTestingVoice(true);
-    setDebugMessage(null);
-    setHelpMessage(null);
+    resetErrors();
     setTestAudioUrl(null);
 
     try {
+      const text =
+        generatedScript.trim() ||
+        (style === "seductive"
+          ? "Listen closely... you already know what you want. Now act like it."
+          : "Stop scrolling... this is the part most people ignore.");
+
       const response = await fetch("/api/tts-test", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          text:
-            style === "seductive"
-              ? "Listen closely... you already know what you want. Now act like it."
-              : "Stop scrolling... this is the part most people ignore.",
+          text,
         }),
       });
 
@@ -164,6 +217,7 @@ export default function NeuralRapturePage() {
       }
 
       setTestAudioUrl(data.audioUrl);
+      setStatus("VOICE_TEST_READY");
       checkTtsHealth();
     } catch (error: any) {
       const raw = error?.message || "VOICE_TEST_FAILED";
@@ -177,6 +231,7 @@ export default function NeuralRapturePage() {
         setDebugMessage(raw);
       }
 
+      setStatus("ERROR_IN_VOICE_TEST");
       checkTtsHealth();
     } finally {
       setIsTestingVoice(false);
@@ -184,16 +239,14 @@ export default function NeuralRapturePage() {
   };
 
   const handleManifest = async () => {
-    if (!input.trim() || isRendering) return;
+    if ((!input.trim() && !generatedScript.trim()) || isRendering) return;
 
     setIsRendering(true);
-    setDebugMessage(null);
-    setHelpMessage(null);
+    resetErrors();
     setSubtitles([]);
     setActiveSubtitle("");
-    setGeneratedScript("");
     setTestAudioUrl(null);
-    setStatus("GENERATING_SCRIPT_AND_VOICE...");
+    setStatus("GENERATING_VOICE_AND_VIDEO...");
 
     try {
       if (previousObjectUrlRef.current) {
@@ -211,6 +264,7 @@ export default function NeuralRapturePage() {
         body: JSON.stringify({
           prompt: input.trim(),
           style,
+          script: generatedScript.trim(),
         }),
       });
 
@@ -275,10 +329,12 @@ export default function NeuralRapturePage() {
       ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
       : "border-red-400/30 bg-red-400/10 text-red-300";
 
+  const canCreateVideo = Boolean(input.trim() || generatedScript.trim());
+
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#010101] p-5 text-zinc-100">
       <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top,rgba(6,182,212,0.18),transparent_45%)]" />
-      <div className="absolute top-0 left-0 h-[2px] w-full bg-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.5)]" />
+      <div className="absolute left-0 top-0 h-[2px] w-full bg-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.5)]" />
 
       <section className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col justify-center gap-6 py-8">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -310,6 +366,7 @@ export default function NeuralRapturePage() {
               <p className="mt-1 text-lg font-black">
                 {isCheckingTts ? "Checking..." : healthLabel}
               </p>
+
               {ttsHealth && !ttsHealth.ok && (
                 <p className="mt-2 max-w-2xl text-sm opacity-90">
                   Lance Colab, upload la voix de référence, attends que{" "}
@@ -319,7 +376,7 @@ export default function NeuralRapturePage() {
               )}
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={checkTtsHealth}
                 disabled={isCheckingTts}
@@ -349,7 +406,7 @@ export default function NeuralRapturePage() {
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                className="h-44 w-full resize-none border-none bg-transparent p-0 text-xl font-light leading-relaxed text-white placeholder-zinc-700 focus:outline-none focus:ring-0"
+                className="h-40 w-full resize-none border-none bg-transparent p-0 text-xl font-light leading-relaxed text-white placeholder-zinc-700 focus:outline-none focus:ring-0"
                 placeholder="Écris seulement ton idée. Exemple : how to become impossible to ignore..."
               />
 
@@ -393,7 +450,7 @@ export default function NeuralRapturePage() {
               </div>
 
               <div className="mt-6 flex h-1.5 w-full gap-[1px] overflow-hidden rounded-full bg-white/5">
-                {getPredictiveHeatmap(input || " ").map((v, i) => (
+                {getPredictiveHeatmap(input || generatedScript || " ").map((v, i) => (
                   <div
                     key={i}
                     style={{ width: `${100 / 20}%`, opacity: v / 100 + 0.2 }}
@@ -417,37 +474,51 @@ export default function NeuralRapturePage() {
                 </div>
               )}
 
-              <button
-                onClick={handleManifest}
-                disabled={isRendering || !input.trim()}
-                className={`mt-5 w-full rounded-2xl py-5 text-xs font-black uppercase tracking-[0.4em] transition-all ${
-                  isRendering || !input.trim()
-                    ? "cursor-not-allowed bg-zinc-800 text-zinc-500"
-                    : "bg-white text-black hover:bg-cyan-400 active:scale-95"
-                }`}
-              >
-                {isRendering ? "Création en cours..." : "Créer la vidéo"}
-              </button>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <button
+                  onClick={handleScriptPreview}
+                  disabled={isGeneratingScript || !input.trim()}
+                  className={`rounded-2xl py-5 text-xs font-black uppercase tracking-[0.3em] transition-all ${
+                    isGeneratingScript || !input.trim()
+                      ? "cursor-not-allowed bg-zinc-800 text-zinc-500"
+                      : "bg-cyan-400 text-black hover:bg-white active:scale-95"
+                  }`}
+                >
+                  {isGeneratingScript ? "Script..." : "Generate Script"}
+                </button>
+
+                <button
+                  onClick={handleManifest}
+                  disabled={isRendering || !canCreateVideo}
+                  className={`rounded-2xl py-5 text-xs font-black uppercase tracking-[0.3em] transition-all ${
+                    isRendering || !canCreateVideo
+                      ? "cursor-not-allowed bg-zinc-800 text-zinc-500"
+                      : "bg-white text-black hover:bg-cyan-400 active:scale-95"
+                  }`}
+                >
+                  {isRendering ? "Création..." : "Create Video"}
+                </button>
+              </div>
             </div>
           </div>
 
           <aside className="rounded-[2rem] border border-white/10 bg-black/30 p-5">
-            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-500">
-              Generated Script Preview
-            </p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-500">
+                Editable Script
+              </p>
 
-            <div className="mt-4 min-h-[180px] rounded-3xl border border-white/10 bg-white/[0.03] p-4">
-              {generatedScript ? (
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">
-                  {generatedScript}
-                </p>
-              ) : (
-                <p className="text-sm leading-relaxed text-zinc-600">
-                  Le script généré apparaîtra ici après création. Ton prompt sera
-                  transformé en narration TikTok US courte, intense et naturelle.
-                </p>
-              )}
+              <p className="text-[10px] text-zinc-600">
+                {generatedScript.length}/1000
+              </p>
             </div>
+
+            <textarea
+              value={generatedScript}
+              onChange={(e) => setGeneratedScript(e.target.value.slice(0, 1000))}
+              className="mt-4 min-h-[220px] w-full resize-none rounded-3xl border border-white/10 bg-white/[0.03] p-4 text-sm leading-relaxed text-zinc-200 placeholder-zinc-700 focus:border-cyan-400/50 focus:outline-none"
+              placeholder="Clique Generate Script, puis modifie le texte ici avant la voix et la vidéo."
+            />
 
             {videoResult && (
               <div className="mt-6 animate-in zoom-in-95 duration-500">
@@ -489,4 +560,4 @@ export default function NeuralRapturePage() {
       </section>
     </main>
   );
-                      }
+        }
