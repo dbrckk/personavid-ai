@@ -23,6 +23,14 @@ type RenderApiResponse = {
   help?: string;
 };
 
+type TtsHealth = {
+  ok: boolean;
+  status: string;
+  voice_ready?: boolean;
+  ref_text_ready?: boolean;
+  message?: string;
+};
+
 export default function NeuralRapturePage() {
   const [input, setInput] = useState("");
   const [isRendering, setIsRendering] = useState(false);
@@ -32,12 +40,44 @@ export default function NeuralRapturePage() {
   const [helpMessage, setHelpMessage] = useState<string | null>(null);
   const [subtitles, setSubtitles] = useState<SubtitleSegment[]>([]);
   const [activeSubtitle, setActiveSubtitle] = useState("");
+  const [ttsHealth, setTtsHealth] = useState<TtsHealth | null>(null);
+  const [isCheckingTts, setIsCheckingTts] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const previousObjectUrlRef = useRef<string | null>(null);
 
+  const checkTtsHealth = async () => {
+    setIsCheckingTts(true);
+
+    try {
+      const response = await fetch("/api/tts-health", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      const data: TtsHealth = await response.json();
+      setTtsHealth(data);
+    } catch (error: any) {
+      setTtsHealth({
+        ok: false,
+        status: "offline",
+        message: error?.message || "TTS unreachable",
+      });
+    } finally {
+      setIsCheckingTts(false);
+    }
+  };
+
   useEffect(() => {
+    checkTtsHealth();
+
+    const interval = window.setInterval(() => {
+      checkTtsHealth();
+    }, 30000);
+
     return () => {
+      window.clearInterval(interval);
+
       if (previousObjectUrlRef.current) {
         URL.revokeObjectURL(previousObjectUrlRef.current);
       }
@@ -122,6 +162,7 @@ export default function NeuralRapturePage() {
 
       setVideoResult(objectUrl);
       setStatus("MP4_READY");
+      checkTtsHealth();
     } catch (err: any) {
       console.error("SYSTEM_FAILURE:", err);
 
@@ -137,10 +178,23 @@ export default function NeuralRapturePage() {
       }
 
       setStatus("ERROR_IN_NEURAL_LINK");
+      checkTtsHealth();
     } finally {
       setIsRendering(false);
     }
   };
+
+  const healthLabel = !ttsHealth
+    ? "CHECKING"
+    : ttsHealth.ok
+      ? "ONLINE"
+      : ttsHealth.status.toUpperCase();
+
+  const healthClass = !ttsHealth
+    ? "border-zinc-700 bg-zinc-900/60 text-zinc-300"
+    : ttsHealth.ok
+      ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
+      : "border-red-400/30 bg-red-400/10 text-red-300";
 
   return (
     <main className="relative min-h-screen flex flex-col items-center justify-center p-6 bg-[#010101] text-zinc-100 overflow-hidden">
@@ -150,7 +204,7 @@ export default function NeuralRapturePage() {
       <div className="relative z-10 w-full max-w-2xl">
         <div className="flex justify-between items-end mb-4 px-2 gap-4">
           <span className="text-[10px] font-bold text-cyan-400 tracking-[0.5em] uppercase">
-            v33.0_F5_Clone
+            v33.1_F5_Clone
           </span>
 
           <span className="text-[10px] text-zinc-500 font-mono font-bold tracking-widest uppercase text-right">
@@ -159,6 +213,35 @@ export default function NeuralRapturePage() {
               {status}
             </span>
           </span>
+        </div>
+
+        <div className={`mb-4 rounded-2xl border px-4 py-3 ${healthClass}`}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.3em]">
+                Colab Voice Engine
+              </p>
+              <p className="mt-1 text-sm font-bold">
+                {isCheckingTts ? "Checking..." : healthLabel}
+              </p>
+            </div>
+
+            <button
+              onClick={checkTtsHealth}
+              disabled={isCheckingTts}
+              className="rounded-xl border border-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.25em] text-white/80 hover:bg-white/10 disabled:opacity-40"
+            >
+              Refresh
+            </button>
+          </div>
+
+          {ttsHealth && !ttsHealth.ok && (
+            <p className="mt-3 text-xs leading-relaxed opacity-90">
+              Lance le notebook Colab, upload la voix de référence, puis attends
+              que <strong>voice_ready</strong> et <strong>ref_text_ready</strong>{" "}
+              soient actifs.
+            </p>
+          )}
         </div>
 
         <div className="relative bg-zinc-900/40 border border-white/10 backdrop-blur-3xl rounded-3xl p-1 shadow-2xl">
