@@ -26,7 +26,12 @@ function cleanPrompt(prompt: unknown) {
 }
 
 function buildVoiceScript(prompt: string, config: any) {
-  const hook = config?.hook || "Stop scrolling...";
+  const rewritten = String(config?.rewrittenPrompt || "").trim();
+  const hook = String(config?.hook || "Stop scrolling...").trim();
+
+  if (rewritten) {
+    return rewritten;
+  }
 
   return [
     hook,
@@ -49,8 +54,9 @@ function buildVoiceScript(prompt: string, config: any) {
   ].join("\n");
 }
 
-function getPexelsSearchQuery(prompt: string) {
-  const text = prompt.toLowerCase();
+function getPexelsSearchQuery(prompt: string, config?: any) {
+  const angle = String(config?.angle || "").toLowerCase();
+  const text = `${prompt} ${angle}`.toLowerCase();
 
   if (text.includes("money") || text.includes("business") || text.includes("argent")) {
     return "business success";
@@ -66,6 +72,10 @@ function getPexelsSearchQuery(prompt: string) {
 
   if (text.includes("motivation") || text.includes("discipline")) {
     return "discipline motivation";
+  }
+
+  if (text.includes("love") || text.includes("relationship")) {
+    return "luxury lifestyle woman";
   }
 
   return "cinematic lifestyle";
@@ -100,7 +110,7 @@ function pickBestVerticalVideo(videos: PexelsVideo[]) {
   return sorted[0]?.link || null;
 }
 
-async function searchPexelsVideo(prompt: string) {
+async function searchPexelsVideo(prompt: string, config?: any) {
   const apiKey = process.env.PEXELS_API_KEY || "";
 
   if (!apiKey) {
@@ -109,7 +119,7 @@ async function searchPexelsVideo(prompt: string) {
 
   const url = new URL("https://api.pexels.com/videos/search");
 
-  url.searchParams.set("query", getPexelsSearchQuery(prompt));
+  url.searchParams.set("query", getPexelsSearchQuery(prompt, config));
   url.searchParams.set("orientation", "portrait");
   url.searchParams.set("per_page", "12");
 
@@ -140,6 +150,9 @@ async function checkColabOnline(baseUrl: string) {
     const response = await fetch(`${baseUrl}/health`, {
       method: "GET",
       cache: "no-store",
+      headers: {
+        "ngrok-skip-browser-warning": "true",
+      },
     });
 
     if (!response.ok) return false;
@@ -208,7 +221,7 @@ export async function POST(req: NextRequest) {
 
     const [audioUrl, videoUrl] = await Promise.all([
       generateColabAudio(script),
-      searchPexelsVideo(prompt),
+      searchPexelsVideo(prompt, config),
     ]);
 
     return NextResponse.json({
@@ -238,4 +251,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-                                                }
+    }
