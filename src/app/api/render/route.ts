@@ -205,7 +205,7 @@ async function searchPexelsVideo(prompt: string, config?: any, style?: ViralStyl
   return pickBestVerticalVideo(videos) || "/demo.mp4";
 }
 
-async function renderFinalInColab(script: string, videoUrl: string) {
+async function startRenderInColab(script: string, videoUrl: string) {
   const baseUrl = getColabBaseUrl();
 
   if (!baseUrl) {
@@ -218,7 +218,7 @@ async function renderFinalInColab(script: string, videoUrl: string) {
     throw new Error("COLAB_OFFLINE_OR_VOICE_NOT_READY");
   }
 
-  const response = await fetch(`${baseUrl}/render-final`, {
+  const response = await fetch(`${baseUrl}/render-start`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -234,7 +234,7 @@ async function renderFinalInColab(script: string, videoUrl: string) {
   const raw = await readTextSafely(response);
 
   if (!response.ok) {
-    throw new Error(`COLAB_RENDER_FAILED: ${response.status} ${raw.slice(0, 600)}`);
+    throw new Error(`COLAB_RENDER_START_FAILED: ${response.status} ${raw.slice(0, 600)}`);
   }
 
   let data: any;
@@ -242,14 +242,14 @@ async function renderFinalInColab(script: string, videoUrl: string) {
   try {
     data = JSON.parse(raw);
   } catch {
-    throw new Error(`COLAB_RENDER_RETURNED_NON_JSON: ${raw.slice(0, 600)}`);
+    throw new Error(`COLAB_RENDER_START_NON_JSON: ${raw.slice(0, 600)}`);
   }
 
   if (!data?.ok || !data?.job_id) {
-    throw new Error(`COLAB_RENDER_FAILED: ${raw.slice(0, 600)}`);
+    throw new Error(`COLAB_RENDER_START_FAILED: ${raw.slice(0, 600)}`);
   }
 
-  return `/api/video/${data.job_id}`;
+  return data.job_id as string;
 }
 
 export async function POST(req: NextRequest) {
@@ -283,11 +283,11 @@ export async function POST(req: NextRequest) {
     const subtitles = generateSubtitleSegments(script, estimatedDuration);
 
     const videoUrl = await searchPexelsVideo(prompt || script, config, style);
-    const finalVideoUrl = await renderFinalInColab(script, videoUrl);
+    const renderJobId = await startRenderInColab(script, videoUrl);
 
     return NextResponse.json({
       ok: true,
-      provider: "F5-TTS-Colab-FullRender",
+      provider: "F5-TTS-Colab-AsyncRender",
       prompt,
       style,
       script,
@@ -295,7 +295,7 @@ export async function POST(req: NextRequest) {
       config,
       subtitles,
       videoUrl,
-      finalVideoUrl,
+      renderJobId,
     });
   } catch (error: any) {
     console.error("RENDER_API_CRASH:", error);
@@ -314,4 +314,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+    }
