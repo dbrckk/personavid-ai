@@ -7,6 +7,8 @@ import {
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 type PexelsVideoFile = {
   id: number;
@@ -52,6 +54,14 @@ function getColabBaseUrl() {
   return String(process.env.COLAB_TTS_URL || "").replace(/\/$/, "");
 }
 
+async function readTextSafely(response: Response) {
+  try {
+    return await response.text();
+  } catch {
+    return "";
+  }
+}
+
 async function checkColabOnline(baseUrl: string) {
   try {
     const response = await fetch(`${baseUrl}/health`, {
@@ -63,9 +73,17 @@ async function checkColabOnline(baseUrl: string) {
       },
     });
 
+    const raw = await response.text();
+
     if (!response.ok) return false;
 
-    const data = await response.json();
+    let data: any;
+
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return false;
+    }
 
     return Boolean(
       data?.ok &&
@@ -213,15 +231,22 @@ async function renderFinalInColab(script: string, videoUrl: string) {
     }),
   });
 
+  const raw = await readTextSafely(response);
+
   if (!response.ok) {
-    const txt = await response.text();
-    throw new Error(`COLAB_RENDER_FAILED: ${response.status} ${txt}`);
+    throw new Error(`COLAB_RENDER_FAILED: ${response.status} ${raw.slice(0, 600)}`);
   }
 
-  const data = await response.json();
+  let data: any;
+
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    throw new Error(`COLAB_RENDER_RETURNED_NON_JSON: ${raw.slice(0, 600)}`);
+  }
 
   if (!data?.ok || !data?.job_id) {
-    throw new Error("COLAB_RENDER_FAILED: missing job_id");
+    throw new Error(`COLAB_RENDER_FAILED: ${raw.slice(0, 600)}`);
   }
 
   return `/api/video/${data.job_id}`;
