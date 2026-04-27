@@ -1,4 +1,4 @@
-  "use client";
+"use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getPredictiveHeatmap } from "../lib/retention-agent";
@@ -60,6 +60,18 @@ type DebugColabResponse = {
   error?: string;
 };
 
+async function readJsonSafely<T>(response: Response): Promise<T> {
+  const text = await response.text();
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(
+      `API returned non-JSON response (${response.status}): ${text.slice(0, 500)}`
+    );
+  }
+}
+
 const styles: { id: ViralStyle; label: string; desc: string }[] = [
   { id: "dominant", label: "Dominant", desc: "Direct, intense, controlled" },
   { id: "seductive", label: "Seductive", desc: "Smooth, confident, magnetic" },
@@ -75,13 +87,7 @@ const examples = [
   "AI tools that make you 10x faster",
 ];
 
-const steps = [
-  "Idea",
-  "Script",
-  "Voice",
-  "Render",
-  "Download",
-];
+const steps = ["Idea", "Script", "Voice", "Render", "Download"];
 
 export default function Page() {
   const [input, setInput] = useState("");
@@ -122,7 +128,7 @@ export default function Page() {
 
   const addLog = (message: string) => {
     const time = new Date().toLocaleTimeString();
-    setLogs((prev) => [`${time} — ${message}`, ...prev].slice(0, 8));
+    setLogs((prev) => [`${time} — ${message}`, ...prev].slice(0, 10));
   };
 
   const resetErrors = () => {
@@ -139,7 +145,7 @@ export default function Page() {
         cache: "no-store",
       });
 
-      const data = await res.json();
+      const data = await readJsonSafely<TtsHealth>(res);
       setTtsHealth(data);
       addLog(data?.ok ? "Colab detected ONLINE" : `Colab not ready: ${data?.status || "unknown"}`);
     } catch (error: any) {
@@ -164,7 +170,7 @@ export default function Page() {
         cache: "no-store",
       });
 
-      const data: DebugColabResponse = await res.json();
+      const data = await readJsonSafely<DebugColabResponse>(res);
       setDebugColab(data);
 
       if (!data.ok) {
@@ -208,7 +214,7 @@ export default function Page() {
         }),
       });
 
-      const data: ScriptPreviewResponse = await res.json();
+      const data = await readJsonSafely<ScriptPreviewResponse>(res);
 
       if (!res.ok || !data.ok) {
         throw new Error(data.error || data.details || "SCRIPT_PREVIEW_FAILED");
@@ -254,7 +260,7 @@ export default function Page() {
         body: JSON.stringify({ text }),
       });
 
-      const data = await res.json();
+      const data = await readJsonSafely<any>(res);
 
       if (!res.ok || !data.ok) {
         throw new Error(data.error || data.details || "VOICE_TEST_FAILED");
@@ -267,7 +273,7 @@ export default function Page() {
       checkTtsHealth();
     } catch (error: any) {
       setDebugMessage(error?.message || "VOICE_TEST_FAILED");
-      setHelpMessage("Si rien ne bouge dans Colab, ouvre /api/debug-colab pour vérifier que Vercel atteint bien ton tunnel.");
+      setHelpMessage("Si rien ne bouge dans Colab, clique Debug pour vérifier que Vercel atteint bien ton tunnel.");
       setStatus("ERROR_VOICE");
       addLog("Voice test failed");
       checkTtsHealth();
@@ -288,8 +294,6 @@ export default function Page() {
     addLog("Sending final render to Colab...");
 
     try {
-      const scriptToSend = generatedScript.trim();
-
       const res = await fetch("/api/render", {
         method: "POST",
         headers: {
@@ -298,12 +302,12 @@ export default function Page() {
         cache: "no-store",
         body: JSON.stringify({
           prompt: input.trim(),
-          script: scriptToSend,
+          script: generatedScript.trim(),
           style,
         }),
       });
 
-      const data: RenderApiResponse = await res.json();
+      const data = await readJsonSafely<RenderApiResponse>(res);
 
       if (!res.ok || !data.ok) {
         throw new Error(
@@ -327,7 +331,7 @@ export default function Page() {
       checkTtsHealth();
     } catch (error: any) {
       setDebugMessage(error?.message || "ERROR_RENDER");
-      setHelpMessage("Vérifie /api/debug-colab. Si Vercel voit bien Colab, regarde les logs Colab pour POST /render-final.");
+      setHelpMessage("Clique Debug. Si Vercel voit bien Colab, regarde les logs Colab pour POST /render-final.");
       setStatus("ERROR_RENDER");
       addLog("Final render failed");
       checkTtsHealth();
@@ -459,14 +463,6 @@ export default function Page() {
               </button>
             </div>
           </div>
-
-          {!ttsHealth?.ok && (
-            <p className="mt-4 text-sm leading-relaxed opacity-90">
-              Colab est visible seulement si `/api/tts-health` reçoit{" "}
-              <strong>voice_ready=true</strong>, <strong>ref_text_ready=true</strong> et{" "}
-              <strong>render_ready=true</strong>.
-            </p>
-          )}
 
           {debugColab && (
             <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-3 text-xs">
