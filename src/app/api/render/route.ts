@@ -85,12 +85,7 @@ async function checkColabOnline(baseUrl: string) {
       return false;
     }
 
-    return Boolean(
-      data?.ok &&
-        data?.voice_ready &&
-        data?.ref_text_ready &&
-        data?.render_ready
-    );
+    return Boolean(data?.ok);
   } catch {
     return false;
   }
@@ -126,11 +121,19 @@ function getPexelsSearchQuery(prompt: string, config?: any, style?: ViralStyle) 
   const angle = String(config?.angle || "").toLowerCase();
   const text = `${prompt} ${angle} ${style || ""}`.toLowerCase();
 
-  if (text.includes("money") || text.includes("business") || text.includes("argent")) {
+  if (
+    text.includes("money") ||
+    text.includes("business") ||
+    text.includes("argent")
+  ) {
     return "business success vertical";
   }
 
-  if (text.includes("fitness") || text.includes("sport") || text.includes("muscle")) {
+  if (
+    text.includes("fitness") ||
+    text.includes("sport") ||
+    text.includes("muscle")
+  ) {
     return "fitness motivation vertical";
   }
 
@@ -179,7 +182,11 @@ function pickBestVerticalVideo(videos: PexelsVideo[]) {
   return sorted[0]?.link || null;
 }
 
-async function searchPexelsVideo(prompt: string, config?: any, style?: ViralStyle) {
+async function searchPexelsVideo(
+  prompt: string,
+  config?: any,
+  style?: ViralStyle
+) {
   const apiKey = process.env.PEXELS_API_KEY || "";
 
   if (!apiKey) return "/demo.mp4";
@@ -234,7 +241,9 @@ async function startRenderInColab(script: string, videoUrl: string) {
   const raw = await readTextSafely(response);
 
   if (!response.ok) {
-    throw new Error(`COLAB_RENDER_START_FAILED: ${response.status} ${raw.slice(0, 600)}`);
+    throw new Error(
+      `COLAB_RENDER_START_FAILED: ${response.status} ${raw.slice(0, 600)}`
+    );
   }
 
   let data: any;
@@ -287,7 +296,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      provider: "F5-TTS-Colab-AsyncRender",
+      provider: "Colab-AsyncRender",
       prompt,
       style,
       script,
@@ -308,10 +317,10 @@ export async function POST(req: NextRequest) {
         error: message,
         help:
           message === "COLAB_OFFLINE_OR_VOICE_NOT_READY"
-            ? "Colab est offline ou la voix n'est pas prête. Lance le notebook, upload l'audio, puis vérifie /api/tts-health."
+            ? "Colab est offline ou la voix n'est pas prête. Lance le notebook puis vérifie /api/tts-health."
             : undefined,
       },
       { status: 500 }
     );
   }
-    }
+}
