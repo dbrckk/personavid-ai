@@ -1,4 +1,4 @@
-"use client";
+  "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getPredictiveHeatmap } from "../lib/retention-agent";
@@ -29,6 +29,7 @@ type RenderApiResponse = {
   estimatedDuration?: number;
   error?: string;
   help?: string;
+  details?: string;
 };
 
 type ScriptPreviewResponse = {
@@ -37,6 +38,7 @@ type ScriptPreviewResponse = {
   subtitles?: SubtitleSegment[];
   estimatedDuration?: number;
   error?: string;
+  details?: string;
 };
 
 type TtsHealth = {
@@ -47,6 +49,15 @@ type TtsHealth = {
   render_ready?: boolean;
   message?: string;
   colab_url?: string;
+  raw?: string;
+};
+
+type DebugColabResponse = {
+  ok?: boolean;
+  colabUrl?: string;
+  status?: number;
+  raw?: string;
+  error?: string;
 };
 
 const styles: { id: ViralStyle; label: string; desc: string }[] = [
@@ -64,6 +75,14 @@ const examples = [
   "AI tools that make you 10x faster",
 ];
 
+const steps = [
+  "Idea",
+  "Script",
+  "Voice",
+  "Render",
+  "Download",
+];
+
 export default function Page() {
   const [input, setInput] = useState("");
   const [style, setStyle] = useState<ViralStyle>("dominant");
@@ -77,21 +96,34 @@ export default function Page() {
   const [activeSubtitle, setActiveSubtitle] = useState("");
 
   const [status, setStatus] = useState("SYSTEM_READY");
+  const [currentStep, setCurrentStep] = useState(0);
   const [debugMessage, setDebugMessage] = useState<string | null>(null);
   const [helpMessage, setHelpMessage] = useState<string | null>(null);
+  const [debugColab, setDebugColab] = useState<DebugColabResponse | null>(null);
 
   const [isRendering, setIsRendering] = useState(false);
   const [isTestingVoice, setIsTestingVoice] = useState(false);
   const [isGeneratingScript, setIsGeneratingScript] = useState(false);
   const [isCheckingTts, setIsCheckingTts] = useState(false);
+  const [isDebuggingColab, setIsDebuggingColab] = useState(false);
 
   const [ttsHealth, setTtsHealth] = useState<TtsHealth | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const wordCount = useMemo(() => {
     return generatedScript.trim().split(/\s+/).filter(Boolean).length;
   }, [generatedScript]);
+
+  const canGenerateScript = Boolean(input.trim()) && !isGeneratingScript;
+  const canTestVoice = !isTestingVoice && Boolean(generatedScript.trim() || input.trim());
+  const canRender = !isRendering && Boolean(generatedScript.trim() || input.trim());
+
+  const addLog = (message: string) => {
+    const time = new Date().toLocaleTimeString();
+    setLogs((prev) => [`${time} — ${message}`, ...prev].slice(0, 8));
+  };
 
   const resetErrors = () => {
     setDebugMessage(null);
@@ -109,13 +141,42 @@ export default function Page() {
 
       const data = await res.json();
       setTtsHealth(data);
-    } catch {
+      addLog(data?.ok ? "Colab detected ONLINE" : `Colab not ready: ${data?.status || "unknown"}`);
+    } catch (error: any) {
       setTtsHealth({
         ok: false,
         status: "offline",
+        message: error?.message || "Health check failed",
       });
+      addLog("Colab health check failed");
     } finally {
       setIsCheckingTts(false);
+    }
+  };
+
+  const handleDebugColab = async () => {
+    setIsDebuggingColab(true);
+    resetErrors();
+
+    try {
+      const res = await fetch("/api/debug-colab", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      const data: DebugColabResponse = await res.json();
+      setDebugColab(data);
+
+      if (!data.ok) {
+        setDebugMessage(data.error || data.raw || "Debug Colab failed");
+      }
+
+      addLog(data.ok ? "Debug Colab OK" : "Debug Colab failed");
+    } catch (error: any) {
+      setDebugMessage(error?.message || "DEBUG_COLAB_FAILED");
+      addLog("Debug Colab crashed");
+    } finally {
+      setIsDebuggingColab(false);
     }
   };
 
@@ -126,11 +187,13 @@ export default function Page() {
   }, []);
 
   const handleScriptPreview = async () => {
-    if (!input.trim() || isGeneratingScript) return;
+    if (!canGenerateScript) return;
 
     setIsGeneratingScript(true);
     resetErrors();
-    setStatus("GENERATING_25_40S_SCRIPT...");
+    setStatus("GENERATING_25_40S_SCRIPT");
+    setCurrentStep(1);
+    addLog("Generating script...");
 
     try {
       const res = await fetch("/api/script-preview", {
@@ -139,39 +202,48 @@ export default function Page() {
           "Content-Type": "application/json",
         },
         cache: "no-store",
-        body: JSON.stringify({ prompt: input.trim(), style }),
+        body: JSON.stringify({
+          prompt: input.trim(),
+          style,
+        }),
       });
 
       const data: ScriptPreviewResponse = await res.json();
 
       if (!res.ok || !data.ok) {
-        throw new Error(data.error || "SCRIPT_PREVIEW_FAILED");
+        throw new Error(data.error || data.details || "SCRIPT_PREVIEW_FAILED");
       }
 
       setGeneratedScript(data.script || "");
       setSubtitles(data.subtitles || []);
       setEstimatedDuration(data.estimatedDuration || null);
       setStatus("SCRIPT_READY");
+      setCurrentStep(2);
+      addLog("Script ready");
     } catch (error: any) {
       setDebugMessage(error?.message || "SCRIPT_PREVIEW_FAILED");
       setStatus("ERROR_SCRIPT");
+      addLog("Script generation failed");
     } finally {
       setIsGeneratingScript(false);
     }
   };
 
   const handleVoiceTest = async () => {
-    if (isTestingVoice) return;
+    if (!canTestVoice) return;
 
     setIsTestingVoice(true);
     resetErrors();
     setTestAudioUrl(null);
-    setStatus("TESTING_CLONED_VOICE...");
+    setStatus("TESTING_CLONED_VOICE");
+    setCurrentStep(2);
+    addLog("Sending voice test to Colab...");
 
     try {
       const text =
         generatedScript.trim() ||
-        "Stop scrolling... this is the part most people ignore. You do not need more motivation. You need a system that makes action automatic.";
+        input.trim() ||
+        "Stop scrolling... this is the part most people ignore.";
 
       const res = await fetch("/api/tts-test", {
         method: "POST",
@@ -185,16 +257,19 @@ export default function Page() {
       const data = await res.json();
 
       if (!res.ok || !data.ok) {
-        throw new Error(data.error || "VOICE_TEST_FAILED");
+        throw new Error(data.error || data.details || "VOICE_TEST_FAILED");
       }
 
       setTestAudioUrl(data.audioUrl);
       setStatus("VOICE_READY");
+      setCurrentStep(3);
+      addLog("Voice test ready");
       checkTtsHealth();
     } catch (error: any) {
       setDebugMessage(error?.message || "VOICE_TEST_FAILED");
-      setHelpMessage("Si Colab est offline, relance le notebook puis clique Refresh.");
+      setHelpMessage("Si rien ne bouge dans Colab, ouvre /api/debug-colab pour vérifier que Vercel atteint bien ton tunnel.");
       setStatus("ERROR_VOICE");
+      addLog("Voice test failed");
       checkTtsHealth();
     } finally {
       setIsTestingVoice(false);
@@ -202,15 +277,19 @@ export default function Page() {
   };
 
   const handleGenerate = async () => {
-    if ((!generatedScript.trim() && !input.trim()) || isRendering) return;
+    if (!canRender) return;
 
     setIsRendering(true);
     resetErrors();
     setVideoResult(null);
     setActiveSubtitle("");
-    setStatus("RENDERING_FULL_MP4_IN_COLAB...");
+    setStatus("RENDERING_FULL_MP4_IN_COLAB");
+    setCurrentStep(3);
+    addLog("Sending final render to Colab...");
 
     try {
+      const scriptToSend = generatedScript.trim();
+
       const res = await fetch("/api/render", {
         method: "POST",
         headers: {
@@ -219,7 +298,7 @@ export default function Page() {
         cache: "no-store",
         body: JSON.stringify({
           prompt: input.trim(),
-          script: generatedScript.trim(),
+          script: scriptToSend,
           style,
         }),
       });
@@ -228,7 +307,9 @@ export default function Page() {
 
       if (!res.ok || !data.ok) {
         throw new Error(
-          `${data.error || "RENDER_FAILED"}${data.help ? `\n\n${data.help}` : ""}`
+          `${data.error || data.details || "RENDER_FAILED"}${
+            data.help ? `\n\n${data.help}` : ""
+          }`
         );
       }
 
@@ -241,11 +322,14 @@ export default function Page() {
       setSubtitles(data.subtitles || []);
       setEstimatedDuration(data.estimatedDuration || null);
       setStatus("MP4_READY");
+      setCurrentStep(4);
+      addLog("Final MP4 ready");
       checkTtsHealth();
     } catch (error: any) {
       setDebugMessage(error?.message || "ERROR_RENDER");
-      setHelpMessage("Vérifie que Colab est ONLINE et que ton domaine ngrok est bien dans COLAB_TTS_URL.");
+      setHelpMessage("Vérifie /api/debug-colab. Si Vercel voit bien Colab, regarde les logs Colab pour POST /render-final.");
       setStatus("ERROR_RENDER");
+      addLog("Final render failed");
       checkTtsHealth();
     } finally {
       setIsRendering(false);
@@ -261,6 +345,8 @@ export default function Page() {
     document.body.appendChild(link);
     link.click();
     link.remove();
+    setCurrentStep(5);
+    addLog("Download started");
   };
 
   const handleTimeUpdate = () => {
@@ -291,24 +377,43 @@ export default function Page() {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-cyan-400/50 shadow-[0_0_30px_rgba(34,211,238,0.8)]" />
 
       <section className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <header className="flex flex-col gap-4 rounded-[2rem] border border-white/10 bg-white/[0.035] p-5 backdrop-blur-2xl md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.55em] text-cyan-300">
-              PersonaVid AI
-            </p>
-            <h1 className="mt-3 max-w-3xl text-4xl font-black tracking-[-0.07em] text-white md:text-6xl">
-              Viral TikTok Generator
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-zinc-400">
-              Prompt → script 25–40s → cloned voice → cinematic video → burned subtitles.
-            </p>
+        <header className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-5 backdrop-blur-2xl">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.55em] text-cyan-300">
+                PersonaVid AI
+              </p>
+              <h1 className="mt-3 max-w-3xl text-4xl font-black tracking-[-0.07em] text-white md:text-6xl">
+                Viral TikTok Generator
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-zinc-400">
+                Prompt → 25–40s script → cloned voice → full MP4 render → burned subtitles.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-500">
+                System
+              </p>
+              <p className="mt-1 text-sm font-bold text-emerald-300">{status}</p>
+            </div>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-500">
-              System
-            </p>
-            <p className="mt-1 text-sm font-bold text-emerald-300">{status}</p>
+          <div className="mt-6 grid gap-2 md:grid-cols-5">
+            {steps.map((step, index) => (
+              <div
+                key={step}
+                className={`rounded-2xl border px-4 py-3 ${
+                  currentStep >= index
+                    ? "border-cyan-300/40 bg-cyan-300/10 text-cyan-100"
+                    : "border-white/10 bg-black/20 text-zinc-600"
+                }`}
+              >
+                <p className="text-[10px] font-black uppercase tracking-[0.25em]">
+                  {index + 1}. {step}
+                </p>
+              </div>
+            ))}
           </div>
         </header>
 
@@ -318,7 +423,9 @@ export default function Page() {
               <p className="text-[10px] font-black uppercase tracking-[0.35em]">
                 Colab Full Render Engine
               </p>
-              <p className="mt-1 text-2xl font-black">{isCheckingTts ? "CHECKING..." : healthLabel}</p>
+              <p className="mt-1 text-2xl font-black">
+                {isCheckingTts ? "CHECKING..." : healthLabel}
+              </p>
               <p className="mt-2 text-xs opacity-80">
                 voice: {String(Boolean(ttsHealth?.voice_ready))} · ref:{" "}
                 {String(Boolean(ttsHealth?.ref_text_ready))} · render:{" "}
@@ -336,8 +443,16 @@ export default function Page() {
               </button>
 
               <button
+                onClick={handleDebugColab}
+                disabled={isDebuggingColab}
+                className="rounded-2xl border border-white/10 px-4 py-3 text-[10px] font-black uppercase tracking-[0.25em] text-white/80 transition hover:bg-white/10 disabled:opacity-40"
+              >
+                {isDebuggingColab ? "Debug..." : "Debug"}
+              </button>
+
+              <button
                 onClick={handleVoiceTest}
-                disabled={isTestingVoice}
+                disabled={!canTestVoice}
                 className="rounded-2xl bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.25em] text-black transition hover:bg-cyan-300 disabled:opacity-40"
               >
                 {isTestingVoice ? "Testing..." : "Test Voice"}
@@ -347,10 +462,20 @@ export default function Page() {
 
           {!ttsHealth?.ok && (
             <p className="mt-4 text-sm leading-relaxed opacity-90">
-              Si Colab est lancé mais détecté offline, vérifie que ton notebook affiche bien{" "}
-              <strong>render_ready=true</strong> dans <strong>/health</strong> et que{" "}
-              <strong>COLAB_TTS_URL</strong> pointe vers le domaine ngrok fixe.
+              Colab est visible seulement si `/api/tts-health` reçoit{" "}
+              <strong>voice_ready=true</strong>, <strong>ref_text_ready=true</strong> et{" "}
+              <strong>render_ready=true</strong>.
             </p>
+          )}
+
+          {debugColab && (
+            <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-3 text-xs">
+              <p>Debug URL: {debugColab.colabUrl || "unknown"}</p>
+              <p>Status: {String(debugColab.status || "none")}</p>
+              <p className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap break-words opacity-80">
+                {debugColab.raw || debugColab.error}
+              </p>
+            </div>
           )}
 
           {testAudioUrl && <audio src={testAudioUrl} controls className="mt-4 w-full" />}
@@ -358,7 +483,7 @@ export default function Page() {
 
         <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
           <div className="space-y-6">
-            <div className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-5 backdrop-blur-2xl">
+            <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-5 backdrop-blur-2xl">
               <p className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-500">
                 Step 1 — Idea
               </p>
@@ -383,7 +508,7 @@ export default function Page() {
               </div>
             </div>
 
-            <div className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-5 backdrop-blur-2xl">
+            <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-5 backdrop-blur-2xl">
               <p className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-500">
                 Step 2 — Voice Style
               </p>
@@ -406,7 +531,7 @@ export default function Page() {
               </div>
             </div>
 
-            <div className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-5 backdrop-blur-2xl">
+            <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-5 backdrop-blur-2xl">
               <div className="flex items-center justify-between gap-4">
                 <p className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-500">
                   Step 3 — Editable Script
@@ -438,9 +563,9 @@ export default function Page() {
               <div className="mt-5 grid gap-3 md:grid-cols-2">
                 <button
                   onClick={handleScriptPreview}
-                  disabled={isGeneratingScript || !input.trim()}
+                  disabled={!canGenerateScript}
                   className={`rounded-2xl py-5 text-xs font-black uppercase tracking-[0.35em] transition ${
-                    isGeneratingScript || !input.trim()
+                    !canGenerateScript
                       ? "cursor-not-allowed bg-zinc-800 text-zinc-500"
                       : "bg-cyan-300 text-black hover:bg-white active:scale-95"
                   }`}
@@ -450,9 +575,9 @@ export default function Page() {
 
                 <button
                   onClick={handleGenerate}
-                  disabled={isRendering || (!generatedScript.trim() && !input.trim())}
+                  disabled={!canRender}
                   className={`rounded-2xl py-5 text-xs font-black uppercase tracking-[0.35em] transition ${
-                    isRendering || (!generatedScript.trim() && !input.trim())
+                    !canRender
                       ? "cursor-not-allowed bg-zinc-800 text-zinc-500"
                       : "bg-white text-black hover:bg-cyan-300 active:scale-95"
                   }`}
@@ -477,54 +602,77 @@ export default function Page() {
             </div>
           </div>
 
-          <aside className="rounded-[2rem] border border-white/10 bg-black/35 p-5 backdrop-blur-2xl">
-            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-500">
-              Final TikTok Preview
-            </p>
+          <aside className="space-y-6">
+            <div className="rounded-[2rem] border border-white/10 bg-black/35 p-5 backdrop-blur-2xl">
+              <p className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-500">
+                Final TikTok Preview
+              </p>
 
-            <div className="mt-5 flex justify-center">
-              <div className="relative aspect-[9/16] w-full max-w-[360px] overflow-hidden rounded-[2rem] border border-white/10 bg-zinc-950 shadow-2xl">
-                {videoResult ? (
-                  <>
-                    <video
-                      ref={videoRef}
-                      src={videoResult}
-                      controls
-                      className="h-full w-full object-cover"
-                      playsInline
-                      onTimeUpdate={handleTimeUpdate}
-                    />
+              <div className="mt-5 flex justify-center">
+                <div className="relative aspect-[9/16] w-full max-w-[360px] overflow-hidden rounded-[2rem] border border-white/10 bg-zinc-950 shadow-2xl">
+                  {videoResult ? (
+                    <>
+                      <video
+                        ref={videoRef}
+                        src={videoResult}
+                        controls
+                        className="h-full w-full object-cover"
+                        playsInline
+                        onTimeUpdate={handleTimeUpdate}
+                      />
 
-                    {activeSubtitle && (
-                      <div className="pointer-events-none absolute left-1/2 bottom-[13%] w-[88%] -translate-x-1/2 text-center">
-                        <p className="text-[clamp(24px,7vw,44px)] font-black uppercase leading-[0.95] tracking-[-0.04em] text-white [text-shadow:_0_3px_0_#000,_0_-3px_0_#000,_3px_0_0_#000,_-3px_0_0_#000,_0_0_18px_rgba(0,0,0,0.9)]">
-                          {activeSubtitle}
-                        </p>
-                      </div>
-                    )}
-                  </>
+                      {activeSubtitle && (
+                        <div className="pointer-events-none absolute left-1/2 bottom-[13%] w-[88%] -translate-x-1/2 text-center">
+                          <p className="text-[clamp(24px,7vw,44px)] font-black uppercase leading-[0.95] tracking-[-0.04em] text-white [text-shadow:_0_3px_0_#000,_0_-3px_0_#000,_3px_0_0_#000,_-3px_0_0_#000,_0_0_18px_rgba(0,0,0,0.9)]">
+                            {activeSubtitle}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex h-full flex-col items-center justify-center p-6 text-center">
+                      <div className="mb-5 h-16 w-16 rounded-3xl border border-cyan-300/20 bg-cyan-300/10 shadow-[0_0_40px_rgba(34,211,238,0.12)]" />
+                      <p className="text-sm font-bold text-zinc-300">
+                        Your rendered TikTok video appears here.
+                      </p>
+                      <p className="mt-2 text-xs leading-relaxed text-zinc-600">
+                        Full MP4 is generated in Colab with cloned voice and burned subtitles.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {videoResult && (
+                <button
+                  onClick={handleDownload}
+                  className="mt-5 w-full rounded-2xl border border-cyan-300/30 bg-cyan-300/10 px-5 py-4 text-xs font-black uppercase tracking-[0.35em] text-cyan-100 transition hover:bg-cyan-300 hover:text-black active:scale-95"
+                >
+                  Download MP4
+                </button>
+              )}
+            </div>
+
+            <div className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-5 backdrop-blur-2xl">
+              <p className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-500">
+                Live Logs
+              </p>
+
+              <div className="mt-4 space-y-2">
+                {logs.length === 0 ? (
+                  <p className="text-sm text-zinc-600">No logs yet.</p>
                 ) : (
-                  <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-                    <div className="mb-5 h-16 w-16 rounded-3xl border border-cyan-300/20 bg-cyan-300/10 shadow-[0_0_40px_rgba(34,211,238,0.12)]" />
-                    <p className="text-sm font-bold text-zinc-300">
-                      Your rendered TikTok video appears here.
+                  logs.map((log) => (
+                    <p
+                      key={log}
+                      className="rounded-2xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-300"
+                    >
+                      {log}
                     </p>
-                    <p className="mt-2 text-xs leading-relaxed text-zinc-600">
-                      Full MP4 is generated in Colab with cloned voice and burned subtitles.
-                    </p>
-                  </div>
+                  ))
                 )}
               </div>
             </div>
-
-            {videoResult && (
-              <button
-                onClick={handleDownload}
-                className="mt-5 w-full rounded-2xl border border-cyan-300/30 bg-cyan-300/10 px-5 py-4 text-xs font-black uppercase tracking-[0.35em] text-cyan-100 transition hover:bg-cyan-300 hover:text-black active:scale-95"
-              >
-                Download MP4
-              </button>
-            )}
           </aside>
         </div>
 
