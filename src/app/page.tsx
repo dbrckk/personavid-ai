@@ -24,7 +24,7 @@ type RenderApiResponse = {
   style?: ViralStyle;
   script?: string;
   videoUrl?: string;
-  finalVideoUrl?: string;
+  renderJobId?: string;
   subtitles?: SubtitleSegment[];
   estimatedDuration?: number;
   error?: string;
@@ -192,6 +192,40 @@ export default function Page() {
     return () => window.clearInterval(interval);
   }, []);
 
+  const pollRenderJob = async (jobId: string) => {
+    for (let i = 0; i < 120; i++) {
+      setStatus(`RENDERING_IN_COLAB_${i + 1}`);
+      addLog(`Render status check ${i + 1}`);
+
+      const res = await fetch(`/api/render-status/${jobId}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      const data = await readJsonSafely<any>(res);
+
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "RENDER_STATUS_FAILED");
+      }
+
+      if (data.status === "done" && data.finalVideoUrl) {
+        setVideoResult(data.finalVideoUrl);
+        setStatus("MP4_READY");
+        setCurrentStep(4);
+        addLog("Final MP4 ready");
+        return;
+      }
+
+      if (data.status === "error") {
+        throw new Error(data.error || "COLAB_RENDER_ERROR");
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+
+    throw new Error("RENDER_TIMEOUT_CLIENT");
+  };
+
   const handleScriptPreview = async () => {
     if (!canGenerateScript) return;
 
@@ -289,9 +323,9 @@ export default function Page() {
     resetErrors();
     setVideoResult(null);
     setActiveSubtitle("");
-    setStatus("RENDERING_FULL_MP4_IN_COLAB");
+    setStatus("STARTING_ASYNC_RENDER");
     setCurrentStep(3);
-    addLog("Sending final render to Colab...");
+    addLog("Starting async render in Colab...");
 
     try {
       const res = await fetch("/api/render", {
@@ -317,21 +351,22 @@ export default function Page() {
         );
       }
 
-      if (!data.finalVideoUrl) {
-        throw new Error("Missing finalVideoUrl");
+      if (!data.renderJobId) {
+        throw new Error("Missing renderJobId");
       }
 
-      setVideoResult(data.finalVideoUrl);
       setGeneratedScript(data.script || generatedScript);
       setSubtitles(data.subtitles || []);
       setEstimatedDuration(data.estimatedDuration || null);
-      setStatus("MP4_READY");
-      setCurrentStep(4);
-      addLog("Final MP4 ready");
+      setStatus("RENDER_STARTED");
+      addLog(`Render job started: ${data.renderJobId}`);
+
+      await pollRenderJob(data.renderJobId);
+
       checkTtsHealth();
     } catch (error: any) {
       setDebugMessage(error?.message || "ERROR_RENDER");
-      setHelpMessage("Clique Debug. Si Vercel voit bien Colab, regarde les logs Colab pour POST /render-final.");
+      setHelpMessage("Clique Debug. Si Vercel voit bien Colab, regarde les logs Colab pour POST /render-start puis GET /render-status.");
       setStatus("ERROR_RENDER");
       addLog("Final render failed");
       checkTtsHealth();
@@ -391,7 +426,7 @@ export default function Page() {
                 Viral TikTok Generator
               </h1>
               <p className="mt-3 max-w-2xl text-sm leading-relaxed text-zinc-400">
-                Prompt → 25–40s script → cloned voice → full MP4 render → burned subtitles.
+                Prompt → 25–40s script → cloned voice → async MP4 render → burned subtitles.
               </p>
             </div>
 
