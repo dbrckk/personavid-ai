@@ -18,12 +18,26 @@ export async function GET(
 
     if (!baseUrl) {
       return NextResponse.json(
-        { ok: false, error: "COLAB_TTS_URL missing" },
+        {
+          ok: false,
+          error: "COLAB_TTS_URL missing",
+        },
         { status: 500 }
       );
     }
 
+    if (!safeJobId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Invalid job id",
+        },
+        { status: 400 }
+      );
+    }
+
     const response = await fetch(`${baseUrl}/render-status/${safeJobId}`, {
+      method: "GET",
       cache: "no-store",
       headers: {
         "ngrok-skip-browser-warning": "true",
@@ -39,7 +53,11 @@ export async function GET(
       data = JSON.parse(text);
     } catch {
       return NextResponse.json(
-        { ok: false, error: "NON_JSON_STATUS", raw: text.slice(0, 500) },
+        {
+          ok: false,
+          error: "NON_JSON_STATUS",
+          raw: text.slice(0, 500),
+        },
         { status: 502 }
       );
     }
@@ -52,6 +70,9 @@ export async function GET(
       ok: true,
       job_id: safeJobId,
       status: data.status,
+      stage: data.stage || data.status || "unknown",
+      progress: typeof data.progress === "number" ? data.progress : 0,
+      final_id: data.final_id || null,
       finalVideoUrl:
         data.status === "done" && data.final_id
           ? `/api/video/${data.final_id}`
@@ -60,8 +81,11 @@ export async function GET(
     });
   } catch (error: any) {
     return NextResponse.json(
-      { ok: false, error: error?.message || "STATUS_FAILED" },
+      {
+        ok: false,
+        error: error?.message || "STATUS_FAILED",
+      },
       { status: 500 }
     );
   }
-      }
+}
