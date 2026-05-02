@@ -38,28 +38,6 @@ export async function POST(req: NextRequest) {
         ? body.text.trim().slice(0, 700)
         : "Stop scrolling. This is the part most people ignore.";
 
-    const health = await fetch(`${baseUrl}/health`, {
-      method: "GET",
-      cache: "no-store",
-      headers: {
-        "ngrok-skip-browser-warning": "true",
-        "User-Agent": "PersonaVidAI/1.0",
-      },
-    });
-
-    const healthRaw = await readTextSafely(health);
-
-    if (!health.ok) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "COLAB_HEALTH_FAILED",
-          details: healthRaw.slice(0, 600),
-        },
-        { status: 503 }
-      );
-    }
-
     const response = await fetch(`${baseUrl}/generate`, {
       method: "POST",
       headers: {
@@ -73,27 +51,26 @@ export async function POST(req: NextRequest) {
       }),
     });
 
-    const raw = await readTextSafely(response);
-
     if (!response.ok) {
+      const errorText = await readTextSafely(response);
+
       return NextResponse.json(
         {
           ok: false,
           error: `COLAB_GENERATE_FAILED_${response.status}`,
-          details: raw.slice(0, 1000),
+          details: errorText.slice(0, 1000),
         },
         { status: 500 }
       );
     }
 
-    const audioBuffer = Buffer.from(raw, "binary");
+    const audioBuffer = await response.arrayBuffer();
+    const base64 = Buffer.from(audioBuffer).toString("base64");
 
-    return new NextResponse(audioBuffer, {
-      status: 200,
-      headers: {
-        "Content-Type": "audio/wav",
-        "Cache-Control": "no-store",
-      },
+    return NextResponse.json({
+      ok: true,
+      text,
+      audioUrl: `data:audio/wav;base64,${base64}`,
     });
   } catch (error: any) {
     return NextResponse.json(
@@ -104,4 +81,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+      }
