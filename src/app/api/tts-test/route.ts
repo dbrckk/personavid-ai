@@ -3,9 +3,18 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 function getColabBaseUrl() {
   return String(process.env.COLAB_TTS_URL || "").replace(/\/$/, "");
+}
+
+async function readTextSafely(response: Response) {
+  try {
+    return await response.text();
+  } catch {
+    return "";
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -14,7 +23,10 @@ export async function POST(req: NextRequest) {
 
     if (!baseUrl) {
       return NextResponse.json(
-        { ok: false, error: "COLAB_TTS_URL missing" },
+        {
+          ok: false,
+          error: "COLAB_TTS_URL missing",
+        },
         { status: 500 }
       );
     }
@@ -23,10 +35,11 @@ export async function POST(req: NextRequest) {
 
     const text =
       typeof body?.text === "string" && body.text.trim()
-        ? body.text.trim().slice(0, 1700)
-        : "Stop scrolling... this is the part most people ignore.";
+        ? body.text.trim().slice(0, 700)
+        : "Stop scrolling. This is the part most people ignore.";
 
-    const healthRes = await fetch(`${baseUrl}/health`, {
+    const health = await fetch(`${baseUrl}/health`, {
+      method: "GET",
       cache: "no-store",
       headers: {
         "ngrok-skip-browser-warning": "true",
@@ -34,49 +47,53 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const healthText = await healthRes.text();
+    const healthRaw = await readTextSafely(health);
 
-    if (!healthRes.ok) {
+    if (!health.ok) {
       return NextResponse.json(
         {
           ok: false,
           error: "COLAB_HEALTH_FAILED",
-          details: healthText,
+          details: healthRaw.slice(0, 600),
         },
         { status: 503 }
       );
     }
 
-    const voiceRes = await fetch(`${baseUrl}/generate`, {
+    const response = await fetch(`${baseUrl}/generate`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "ngrok-skip-browser-warning": "true",
         "User-Agent": "PersonaVidAI/1.0",
       },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({
+        text,
+        video_url: "",
+      }),
     });
 
-    if (!voiceRes.ok) {
-      const err = await voiceRes.text();
+    const raw = await readTextSafely(response);
 
+    if (!response.ok) {
       return NextResponse.json(
         {
           ok: false,
-          error: "COLAB_GENERATE_FAILED",
-          details: err,
+          error: `COLAB_GENERATE_FAILED_${response.status}`,
+          details: raw.slice(0, 1000),
         },
         { status: 500 }
       );
     }
 
-    const audioBuffer = await voiceRes.arrayBuffer();
-    const base64 = Buffer.from(audioBuffer).toString("base64");
+    const audioBuffer = Buffer.from(raw, "binary");
 
-    return NextResponse.json({
-      ok: true,
-      text,
-      audioUrl: `data:audio/wav;base64,${base64}`,
+    return new NextResponse(audioBuffer, {
+      status: 200,
+      headers: {
+        "Content-Type": "audio/wav",
+        "Cache-Control": "no-store",
+      },
     });
   } catch (error: any) {
     return NextResponse.json(
@@ -87,4 +104,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+                            }
