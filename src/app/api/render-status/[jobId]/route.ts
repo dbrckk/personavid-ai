@@ -18,20 +18,14 @@ export async function GET(
 
     if (!baseUrl) {
       return NextResponse.json(
-        {
-          ok: false,
-          error: "COLAB_TTS_URL missing",
-        },
+        { ok: false, error: "COLAB_TTS_URL missing" },
         { status: 500 }
       );
     }
 
     if (!safeJobId) {
       return NextResponse.json(
-        {
-          ok: false,
-          error: "Invalid job id",
-        },
+        { ok: false, error: "Invalid job id" },
         { status: 400 }
       );
     }
@@ -62,20 +56,22 @@ export async function GET(
       );
     }
 
-    if (!response.ok || !data?.ok) {
+    if (!response.ok || data?.ok === false) {
       return NextResponse.json(data, { status: response.status });
     }
+
+    const finalId = data.final_id || data.final || null;
 
     return NextResponse.json({
       ok: true,
       job_id: safeJobId,
-      status: data.status,
+      status: data.status || "unknown",
       stage: data.stage || data.status || "unknown",
       progress: typeof data.progress === "number" ? data.progress : 0,
-      final_id: data.final_id || null,
+      final_id: finalId,
       finalVideoUrl:
-        data.status === "done" && data.final_id
-          ? `/api/video/${data.final_id}`
+        (data.status === "done" || data.status === "completed") && finalId
+          ? `/api/video/${finalId}`
           : null,
       error: data.error || null,
     });
