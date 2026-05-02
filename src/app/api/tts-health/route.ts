@@ -2,26 +2,35 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const runtime = "nodejs";
 
 function getColabBaseUrl() {
   return String(process.env.COLAB_TTS_URL || "").replace(/\/$/, "");
 }
 
-export async function GET() {
-  const baseUrl = getColabBaseUrl();
-
-  if (!baseUrl) {
-    return NextResponse.json(
-      {
-        ok: false,
-        status: "missing_url",
-        message: "COLAB_TTS_URL missing",
-      },
-      { status: 500 }
-    );
-  }
-
+async function readTextSafely(response: Response) {
   try {
+    return await response.text();
+  } catch {
+    return "";
+  }
+}
+
+export async function GET() {
+  try {
+    const baseUrl = getColabBaseUrl();
+
+    if (!baseUrl) {
+      return NextResponse.json(
+        {
+          ok: false,
+          status: "missing_env",
+          error: "COLAB_TTS_URL not set",
+        },
+        { status: 500 }
+      );
+    }
+
     const response = await fetch(`${baseUrl}/health`, {
       method: "GET",
       cache: "no-store",
@@ -31,58 +40,51 @@ export async function GET() {
       },
     });
 
-    const rawText = await response.text();
+    const raw = await readTextSafely(response);
 
-    let data: any = null;
-
-    try {
-      data = JSON.parse(rawText);
-    } catch {
+    if (!response.ok) {
       return NextResponse.json(
         {
           ok: false,
-          status: "invalid_response",
-          message: "Colab did not return JSON",
-          raw: rawText.slice(0, 300),
+          status: "colab_http_error",
+          code: response.status,
+          raw: raw.slice(0, 500),
         },
         { status: 502 }
       );
     }
 
-    const ready = Boolean(
-      response.ok &&
-        data?.ok &&
-        data?.voice_ready &&
-        data?.ref_text_ready &&
-        data?.render_ready
-    );
+    let data: any;
 
-    return NextResponse.json(
-      {
-        ok: ready,
-        status: ready ? "online" : "voice_not_ready",
-        voice_ready: Boolean(data?.voice_ready),
-        ref_text_ready: Boolean(data?.ref_text_ready),
-        render_ready: Boolean(data?.render_ready),
-        colab_url: baseUrl,
-        colab: data,
-      },
-      {
-        status: ready ? 200 : 503,
-        headers: {
-          "Cache-Control": "no-store",
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return NextResponse.json(
+        {
+          ok: false,
+          status: "non_json_response",
+          raw: raw.slice(0, 500),
         },
-      }
-    );
+        { status: 502 }
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      status: "online",
+      engine: data?.engine || "unknown",
+      voice_ready: Boolean(data?.voice_ready),
+      ref_text_ready: Boolean(data?.ref_text_ready),
+      render_ready: Boolean(data?.render_ready),
+    });
   } catch (error: any) {
     return NextResponse.json(
       {
         ok: false,
-        status: "offline",
-        message: error?.message || "Colab unreachable",
-        colab_url: baseUrl,
+        status: "network_error",
+        error: error?.message || "UNKNOWN_ERROR",
       },
-      { status: 503 }
+      { status: 500 }
     );
   }
-      }
+}
