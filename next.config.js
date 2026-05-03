@@ -4,20 +4,26 @@ const nextConfig = {
 
   experimental: {
     serverActions: {
-      bodySizeLimit: "20mb",
-    },
+      bodySizeLimit: "20mb"
+    }
   },
 
-  webpack: (config) => {
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      fs: false,
-      path: false,
-      crypto: false,
-    };
-
-    return config;
-  },
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "**.pexels.com"
+      },
+      {
+        protocol: "https",
+        hostname: "**.ngrok-free.dev"
+      },
+      {
+        protocol: "https",
+        hostname: "**.ngrok-free.app"
+      }
+    ]
+  }
 };
 
-module.exports = nextConfig;
+export default nextConfig;
