@@ -5,10 +5,14 @@ export type SubtitleSegment = {
   end: number;
 };
 
-function splitIntoChunks(text: string) {
-  const clean = String(text || "")
+function cleanScript(script: string) {
+  return String(script || "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function splitIntoSubtitleChunks(script: string) {
+  const clean = cleanScript(script);
 
   if (!clean) return [];
 
@@ -26,7 +30,7 @@ function splitIntoChunks(text: string) {
     }
   }
 
-  if (current.length > 0) {
+  if (current.length) {
     chunks.push(current.join(" "));
   }
 
@@ -34,37 +38,34 @@ function splitIntoChunks(text: string) {
 }
 
 export function estimateDurationFromScript(script: string) {
-  const words = String(script || "")
-    .trim()
-    .split(/\s+/)
+  const words = cleanScript(script)
+    .split(" ")
     .filter(Boolean).length;
 
-  const estimated = Math.round((words / 155) * 60);
+  const estimatedSeconds = Math.round((words / 155) * 60);
 
-  return Math.max(25, Math.min(40, estimated || 30));
+  return Math.max(25, Math.min(40, estimatedSeconds || 30));
 }
 
 export function generateSubtitleSegments(
   script: string,
   estimatedDuration = estimateDurationFromScript(script)
 ): SubtitleSegment[] {
-  const chunks = splitIntoChunks(script);
+  const chunks = splitIntoSubtitleChunks(script);
 
-  if (chunks.length === 0) {
-    return [];
-  }
+  if (!chunks.length) return [];
 
   const segmentDuration = estimatedDuration / chunks.length;
 
-  return chunks.map((chunk, index) => {
+  return chunks.map((text, index) => {
     const start = Number((index * segmentDuration).toFixed(2));
     const end = Number(((index + 1) * segmentDuration).toFixed(2));
 
     return {
       id: `subtitle-${index}`,
-      text: chunk,
+      text,
       start,
       end,
     };
   });
-  }
+}
