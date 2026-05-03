@@ -47,7 +47,7 @@ function cleanScript(script: unknown) {
 
 function cleanStyle(style: unknown): ViralStyle {
   const value = String(style || "").trim() as ViralStyle;
-  return allowedStyles.includes(value) ? value : "dominant";
+  return allowedStyles.includes(value) ? value : "seductive";
 }
 
 function getColabBaseUrl() {
@@ -77,15 +77,9 @@ async function checkColabOnline(baseUrl: string) {
 
     if (!response.ok) return false;
 
-    let data: any;
+    const data = JSON.parse(raw);
 
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      return false;
-    }
-
-    return Boolean(data?.ok);
+    return Boolean(data?.ok && data?.render_ready);
   } catch {
     return false;
   }
@@ -101,19 +95,19 @@ function buildVoiceScript(prompt: string, config: any, userScript?: string) {
   if (rewritten) return rewritten.slice(0, 1700);
 
   return [
-    "Stop scrolling...",
+    "Stop scrolling.",
     "",
-    "Most people think they need more motivation.",
+    "Most people think the problem is motivation.",
     "",
-    "They don't.",
+    "It is not.",
     "",
     prompt,
     "",
-    "They need a system that makes the right action impossible to avoid.",
+    "The real problem is that their environment keeps rewarding the weakest version of them.",
     "",
-    "The part you ignore is the part that changes everything.",
+    "So stop waiting to feel ready.",
     "",
-    "Save this before you forget it.",
+    "Remove one excuse. Build one rule. Repeat it until your identity has no choice but to change.",
   ].join("\n");
 }
 
@@ -121,37 +115,33 @@ function getPexelsSearchQuery(prompt: string, config?: any, style?: ViralStyle) 
   const angle = String(config?.angle || "").toLowerCase();
   const text = `${prompt} ${angle} ${style || ""}`.toLowerCase();
 
-  if (
-    text.includes("money") ||
-    text.includes("business") ||
-    text.includes("argent")
-  ) {
-    return "business success vertical";
+  if (text.includes("money") || text.includes("business") || text.includes("wealth")) {
+    return "luxury business woman city vertical";
   }
 
-  if (
-    text.includes("fitness") ||
-    text.includes("sport") ||
-    text.includes("muscle")
-  ) {
-    return "fitness motivation vertical";
+  if (text.includes("ai") || text.includes("technology") || text.includes("tech")) {
+    return "futuristic technology neon vertical";
   }
 
-  if (text.includes("ai") || text.includes("ia") || text.includes("tech")) {
-    return "technology futuristic vertical";
+  if (text.includes("discipline") || text.includes("motivation") || text.includes("success")) {
+    return "success motivation cinematic vertical";
   }
 
-  if (text.includes("motivation") || text.includes("discipline")) {
-    return "discipline motivation vertical";
+  if (text.includes("fitness") || text.includes("gym") || text.includes("body")) {
+    return "fitness woman cinematic vertical";
   }
 
-  if (style === "luxury") return "luxury lifestyle vertical";
-  if (style === "mysterious") return "dark cinematic aesthetic";
-  if (style === "seductive") return "confident woman cinematic";
-  if (style === "dominant") return "powerful woman city";
-  if (style === "motivational") return "success discipline motivation";
+  if (text.includes("love") || text.includes("relationship") || text.includes("dating")) {
+    return "confident woman night cinematic vertical";
+  }
 
-  return "cinematic lifestyle vertical";
+  if (style === "seductive") return "confident woman cinematic portrait";
+  if (style === "dominant") return "powerful woman city cinematic";
+  if (style === "luxury") return "luxury lifestyle woman vertical";
+  if (style === "mysterious") return "dark cinematic woman silhouette";
+  if (style === "motivational") return "success discipline cinematic vertical";
+
+  return "cinematic woman lifestyle vertical";
 }
 
 function pickBestVerticalVideo(videos: PexelsVideo[]) {
@@ -165,18 +155,36 @@ function pickBestVerticalVideo(videos: PexelsVideo[]) {
   const mp4Files = files.filter((file) => file.file_type === "video/mp4");
 
   const verticalFiles = mp4Files.filter(
-    (file) => file.height >= file.width && file.height >= 1280
+    (file) =>
+      file.height >= file.width &&
+      file.height >= 1280 &&
+      file.width >= 720
   );
 
-  const candidates = verticalFiles.length > 0 ? verticalFiles : mp4Files;
+  const goodDurationFiles = verticalFiles.filter(
+    (file) => file.duration >= 5 && file.duration <= 60
+  );
+
+  const candidates =
+    goodDurationFiles.length > 0
+      ? goodDurationFiles
+      : verticalFiles.length > 0
+        ? verticalFiles
+        : mp4Files;
 
   const sorted = candidates.sort((a, b) => {
     const aRatio = a.height / Math.max(a.width, 1);
     const bRatio = b.height / Math.max(b.width, 1);
+
     const aSize = a.width * a.height;
     const bSize = b.width * b.height;
 
-    return bRatio - aRatio || bSize - aSize;
+    const aQualityScore =
+      (a.quality === "hd" ? 100000000 : 0) + aRatio * 1000000 + aSize;
+    const bQualityScore =
+      (b.quality === "hd" ? 100000000 : 0) + bRatio * 1000000 + bSize;
+
+    return bQualityScore - aQualityScore;
   });
 
   return sorted[0]?.link || null;
@@ -191,25 +199,30 @@ async function searchPexelsVideo(
 
   if (!apiKey) return "/demo.mp4";
 
-  const url = new URL("https://api.pexels.com/videos/search");
+  try {
+    const url = new URL("https://api.pexels.com/videos/search");
 
-  url.searchParams.set("query", getPexelsSearchQuery(prompt, config, style));
-  url.searchParams.set("orientation", "portrait");
-  url.searchParams.set("per_page", "12");
+    url.searchParams.set("query", getPexelsSearchQuery(prompt, config, style));
+    url.searchParams.set("orientation", "portrait");
+    url.searchParams.set("size", "large");
+    url.searchParams.set("per_page", "20");
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      Authorization: apiKey,
-    },
-    cache: "no-store",
-  });
+    const response = await fetch(url.toString(), {
+      headers: {
+        Authorization: apiKey,
+      },
+      cache: "no-store",
+    });
 
-  if (!response.ok) return "/demo.mp4";
+    if (!response.ok) return "/demo.mp4";
 
-  const data = await response.json();
-  const videos = Array.isArray(data?.videos) ? data.videos : [];
+    const data = await response.json();
+    const videos = Array.isArray(data?.videos) ? data.videos : [];
 
-  return pickBestVerticalVideo(videos) || "/demo.mp4";
+    return pickBestVerticalVideo(videos) || "/demo.mp4";
+  } catch {
+    return "/demo.mp4";
+  }
 }
 
 async function startRenderInColab(script: string, videoUrl: string) {
@@ -228,99 +241,4 @@ async function startRenderInColab(script: string, videoUrl: string) {
   const response = await fetch(`${baseUrl}/render-start`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      "ngrok-skip-browser-warning": "true",
-      "User-Agent": "PersonaVidAI/1.0",
-    },
-    body: JSON.stringify({
-      text: script.slice(0, 1700),
-      video_url: videoUrl,
-    }),
-  });
-
-  const raw = await readTextSafely(response);
-
-  if (!response.ok) {
-    throw new Error(
-      `COLAB_RENDER_START_FAILED: ${response.status} ${raw.slice(0, 600)}`
-    );
-  }
-
-  let data: any;
-
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    throw new Error(`COLAB_RENDER_START_NON_JSON: ${raw.slice(0, 600)}`);
-  }
-
-  if (!data?.ok || !data?.job_id) {
-    throw new Error(`COLAB_RENDER_START_FAILED: ${raw.slice(0, 600)}`);
-  }
-
-  return data.job_id as string;
-}
-
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-
-    const prompt = cleanPrompt(body?.prompt);
-    const style = cleanStyle(body?.style);
-    const manualScript = cleanScript(body?.script);
-
-    if (!prompt && !manualScript) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "Missing prompt or script",
-        },
-        { status: 400 }
-      );
-    }
-
-    const config = prompt
-      ? await generateNeuralScript(prompt, style)
-      : {
-          angle: style,
-          mood: `confident_${style}`,
-          rewrittenPrompt: manualScript,
-        };
-
-    const script = buildVoiceScript(prompt, config, manualScript);
-    const estimatedDuration = estimateDurationFromScript(script);
-    const subtitles = generateSubtitleSegments(script, estimatedDuration);
-
-    const videoUrl = await searchPexelsVideo(prompt || script, config, style);
-    const renderJobId = await startRenderInColab(script, videoUrl);
-
-    return NextResponse.json({
-      ok: true,
-      provider: "Colab-AsyncRender",
-      prompt,
-      style,
-      script,
-      estimatedDuration,
-      config,
-      subtitles,
-      videoUrl,
-      renderJobId,
-    });
-  } catch (error: any) {
-    console.error("RENDER_API_CRASH:", error);
-
-    const message = error?.message || "API_CRASH";
-
-    return NextResponse.json(
-      {
-        ok: false,
-        error: message,
-        help:
-          message === "COLAB_OFFLINE_OR_VOICE_NOT_READY"
-            ? "Colab est offline ou la voix n'est pas prête. Lance le notebook puis vérifie /api/tts-health."
-            : undefined,
-      },
-      { status: 500 }
-    );
-  }
-}
+      "Content-Type": "application/json
