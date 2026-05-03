@@ -1,87 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
-export const runtime = "nodejs";
 
 function getColabBaseUrl() {
   return String(process.env.COLAB_TTS_URL || "").replace(/\/$/, "");
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { jobId: string } }
 ) {
   try {
     const baseUrl = getColabBaseUrl();
-    const safeJobId = String(params.jobId || "").replace(/[^a-f0-9]/g, "");
+    const jobId = params.jobId;
 
-    if (!baseUrl) {
-      return NextResponse.json(
-        { ok: false, error: "COLAB_TTS_URL missing" },
-        { status: 500 }
-      );
-    }
-
-    if (!safeJobId) {
-      return NextResponse.json(
-        { ok: false, error: "Invalid job id" },
-        { status: 400 }
-      );
-    }
-
-    const response = await fetch(`${baseUrl}/render-status/${safeJobId}`, {
-      method: "GET",
+    const res = await fetch(`${baseUrl}/render-status/${jobId}`, {
       cache: "no-store",
       headers: {
-        "ngrok-skip-browser-warning": "true",
-        "User-Agent": "PersonaVidAI/1.0",
-      },
+        "ngrok-skip-browser-warning": "true"
+      }
     });
 
-    const text = await response.text();
-
-    let data: any;
+    const text = await res.text();
 
     try {
-      data = JSON.parse(text);
+      return NextResponse.json(JSON.parse(text));
     } catch {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "NON_JSON_STATUS",
-          raw: text.slice(0, 500),
-        },
-        { status: 502 }
-      );
-    }
-
-    if (!response.ok || data?.ok === false) {
-      return NextResponse.json(data, { status: response.status });
-    }
-
-    const finalId = data.final_id || data.final || null;
-
-    return NextResponse.json({
-      ok: true,
-      job_id: safeJobId,
-      status: data.status || "unknown",
-      stage: data.stage || data.status || "unknown",
-      progress: typeof data.progress === "number" ? data.progress : 0,
-      final_id: finalId,
-      finalVideoUrl:
-        (data.status === "done" || data.status === "completed") && finalId
-          ? `/api/video/${finalId}`
-          : null,
-      error: data.error || null,
-    });
-  } catch (error: any) {
-    return NextResponse.json(
-      {
+      return NextResponse.json({
         ok: false,
-        error: error?.message || "STATUS_FAILED",
-      },
-      { status: 500 }
-    );
+        error: "INVALID_JSON",
+        raw: text.slice(0, 300)
+      });
+    }
+  } catch (e: any) {
+    return NextResponse.json({
+      ok: false,
+      error: e?.message || "STATUS_FAILED"
+    });
   }
 }
