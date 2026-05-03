@@ -7,6 +7,8 @@ import {
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const allowedStyles: ViralStyle[] = [
   "dominant",
@@ -22,7 +24,7 @@ function cleanPrompt(prompt: unknown) {
 
 function cleanStyle(style: unknown): ViralStyle {
   const value = String(style || "").trim() as ViralStyle;
-  return allowedStyles.includes(value) ? value : "dominant";
+  return allowedStyles.includes(value) ? value : "seductive";
 }
 
 export async function POST(req: NextRequest) {
@@ -42,7 +44,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const config = await generateNeuralScript(prompt, style);
+    const config = await generateNeuralScript(
+      `${prompt}\n\nVariation seed: ${Date.now()}-${Math.random()}`,
+      style
+    );
+
     const script = String(config.rewrittenPrompt || "").trim();
 
     const estimatedDuration = estimateDurationFromScript(script);
@@ -66,4 +72,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+      }
